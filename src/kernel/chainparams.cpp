@@ -149,7 +149,8 @@ public:
 
         bech32_hrp = "bc";
 
-        vFixedSeeds = std::vector<uint8_t>(std::begin(chainparams_seed_main), std::end(chainparams_seed_main));
+        // fixed seeds disabled; to re-enable, populate chainparams_seed_main array in chainparamsseeds.h, uncomment line bellow and rebuild
+        // vFixedSeeds = std::vector<uint8_t>(std::begin(chainparams_seed_main), std::end(chainparams_seed_main));
 
         fDefaultConsistencyChecks = false;
         m_is_mockable_chain = false;
@@ -255,7 +256,8 @@ public:
 
         bech32_hrp = "tb";
 
-        vFixedSeeds = std::vector<uint8_t>(std::begin(chainparams_seed_test), std::end(chainparams_seed_test));
+        // fixed seeds disabled; to re-enable, populate chainparams_seed_test array in chainparamsseeds.h, uncomment line bellow and rebuild
+        // vFixedSeeds = std::vector<uint8_t>(std::begin(chainparams_seed_test), std::end(chainparams_seed_test));
 
         fDefaultConsistencyChecks = false;
         m_is_mockable_chain = false;
