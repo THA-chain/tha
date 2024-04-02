@@ -113,10 +113,10 @@ public:
          * a large 32-bit integer with any alignment.
          */
         pchMessageStart[0] = 0xf9;
-        pchMessageStart[1] = 0xbe;
-        pchMessageStart[2] = 0xb4;
+        pchMessageStart[1] = 0x54;
+        pchMessageStart[2] = 0x48;
         pchMessageStart[3] = 0xd9;
-        nDefaultPort = 8333;
+        nDefaultPort = 7222;
         nPruneAfterHeight = 100000;
         m_assumed_blockchain_size = 590;
         m_assumed_chain_state_size = 9;
@@ -212,10 +212,10 @@ public:
         consensus.defaultAssumeValid = uint256{};
 
         pchMessageStart[0] = 0x0b;
-        pchMessageStart[1] = 0x11;
-        pchMessageStart[2] = 0x09;
+        pchMessageStart[1] = 0x74;
+        pchMessageStart[2] = 0x68;
         pchMessageStart[3] = 0x07;
-        nDefaultPort = 18333;
+        nDefaultPort = 17222;
         nPruneAfterHeight = 1000;
         m_assumed_blockchain_size = 42;
         m_assumed_chain_state_size = 3;
@@ -347,7 +347,7 @@ public:
         uint256 hash = h.GetHash();
         std::copy_n(hash.begin(), 4, pchMessageStart.begin());
 
-        nDefaultPort = 38333;
+        nDefaultPort = 37222;
         nPruneAfterHeight = 1000;
 
         genesis = CreateGenesisBlock(1598918400, 52613770, 0x1e0377ae, 1, 50 * COIN);
@@ -421,10 +421,10 @@ public:
         consensus.defaultAssumeValid = uint256{};
 
         pchMessageStart[0] = 0xfa;
-        pchMessageStart[1] = 0xbf;
-        pchMessageStart[2] = 0xb5;
+        pchMessageStart[1] = 0x54;
+        pchMessageStart[2] = 0x68;
         pchMessageStart[3] = 0xda;
-        nDefaultPort = 18444;
+        nDefaultPort = 17333;
         nPruneAfterHeight = opts.fastprune ? 100 : 1000;
         m_assumed_blockchain_size = 0;
         m_assumed_chain_state_size = 0;
