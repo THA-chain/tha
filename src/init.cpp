@@ -89,6 +89,7 @@
 #include <validation.h>
 #include <validationinterface.h>
 #include <walletinitinterface.h>
+#include <wallet/wallet.h>
 
 #include <algorithm>
 #include <condition_variable>
@@ -1578,6 +1579,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     }
 
     ChainstateManager& chainman = *Assert(node.chainman);
+    gp_chainman = node.chainman.get();
 
     assert(!node.peerman);
     node.peerman = PeerManager::make(*node.connman, *node.addrman,

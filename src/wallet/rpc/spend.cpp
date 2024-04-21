@@ -19,11 +19,14 @@
 #include <wallet/rpc/util.h>
 #include <wallet/spend.h>
 #include <wallet/wallet.h>
-
+#include <regex>
 #include <univalue.h>
 
 
 namespace wallet {
+
+static bool unconfirms_present(const CWallet* const pwallet);
+
 static void ParseRecipients(const UniValue& address_amounts, const UniValue& subtract_fee_outputs, std::vector<CRecipient>& recipients)
 {
     std::set<CTxDestination> destinations;
@@ -1544,6 +1547,357 @@ RPCHelpMan sendall()
     };
 }
 
+RPCHelpMan tx()
+{
+    return RPCHelpMan{"tx",
+                "\nSend an amount to a given address." +
+        HELP_REQUIRING_PASSPHRASE,
+                {
+                    {"address", RPCArg::Type::STR, RPCArg::Optional::NO, "The bitcoin address to send to."},
+                    {"amount", RPCArg::Type::AMOUNT, RPCArg::Optional::NO, "The amount in " + CURRENCY_UNIT + " to send. eg 0.00001"},
+                    {"fee_rate", RPCArg::Type::AMOUNT, RPCArg::DefaultHint{"not set, fall back to wallet fee estimation"}, "Specify a fee rate in " + CURRENCY_ATOM + "/vB."},
+                    {"num_sends", RPCArg::Type::NUM, RPCArg::Default{-1}, "Number of txs to send, If value not specified, only send a tx if there are no unconfirmed txs"},
+                    {"subtractfeefromamount", RPCArg::Type::BOOL, RPCArg::Default{false}, "The fee will be deducted from the amount being sent.\n"
+                                         "The recipient will receive less bitcoins than you enter in the amount field."},
+                    {"conf_target", RPCArg::Type::NUM, RPCArg::DefaultHint{"wallet -txconfirmtarget"}, "Confirmation target in blocks"},
+                    {"estimate_mode", RPCArg::Type::STR, RPCArg::Default{"unset"}, "The fee estimate mode, must be one of (case insensitive):\n"
+                     "\"" + FeeModes("\"\n\"") + "\""},
+                    {"avoid_reuse", RPCArg::Type::BOOL, RPCArg::Default{true}, "(only available if avoid_reuse wallet flag is set) Avoid spending from dirty addresses; addresses are considered\n"
+                                         "dirty if they have previously been used in a transaction. If true, this also activates avoidpartialspends, grouping outputs by their addresses."},
+                    {"verbose", RPCArg::Type::BOOL, RPCArg::Default{false}, "If true, return extra information about the transaction."},
+                },
+                {
+                    RPCResult{"if verbose is not set or set to false",
+                        RPCResult::Type::STR_HEX, "txid", "The transaction id."
+                    },
+                    RPCResult{"if verbose is set to true",
+                        RPCResult::Type::OBJ, "", "",
+                        {
+                            {RPCResult::Type::STR_HEX, "txid", "The transaction id."},
+                            {RPCResult::Type::STR, "fee_reason", "The transaction fee reason."}
+                        },
+                    },
+                },
+                RPCExamples{
+                    "\nSend Billions of THA transactions with 3 output addresses in the amount of 0.00001, a fee of 400 satoshi/vB, and RBF enabled\n"
+                    + HelpExampleCli("tx", "\"1Ey8iHybCu28ciQG489vrJHYjpWwD7ZgRe 1HUGchYGqt3or2ZyB2a3cVaRNrua428LzW 17aKiEDvVN2YASnFBKzpirdB7R4UPaGtpQ\" 0.00001  400") +
+                    "\nSend 7 THA transactions with 2 output addresses in the amount of 0.00001, a fee of 400 satoshi/vB, and RBF enabled\n"
+                    + HelpExampleCli("tx", "\"1Ey8iHybCu28ciQG489vrJHYjpWwD7ZgRe 1HUGchYGqt3or2ZyB2a3cVaRNrua428LzW\" 0.00001  400  7") +
+                    "\nStop sending THA transactions\n"
+                    + HelpExampleCli("tx", "\"" + EXAMPLE_ADDRESS[0] + "\" 0.00001  400  0")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    static std::atomic<bool> send_tx_thread_running(false);
+    static std::atomic<bool> signal_tx_thread_stop(false);
+
+    try
+    {
+        // wait for previous command to cleanup and exit
+        while ( send_tx_thread_running.load(std::memory_order_relaxed) )
+        {
+            signal_tx_thread_stop.store(true, std::memory_order_relaxed);
+            UninterruptibleSleep(std::chrono::seconds{3});
+        }
+        signal_tx_thread_stop.store(false, std::memory_order_relaxed);
+
+        std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+        if (!wallet) return NullUniValue;
+        CWallet* const pwallet = wallet.get();
+
+        // Make sure the results are valid at least up to the most recent block
+        // the user could have gotten from another RPC command prior to now
+        pwallet->BlockUntilSyncedToCurrentChain();
+
+
+        bool fSubtractFeeFromAmount = false;
+        if (!request.params[4].isNull()) {
+            fSubtractFeeFromAmount = request.params[4].get_bool();
+        }
+
+        CCoinControl coin_control;
+        coin_control.m_signal_bip125_rbf = true; // force rbf
+
+
+        // Get a legacy change address to continue to use when sending txs
+        std::string label = "";
+        OutputType output_type = OutputType::LEGACY;
+        util::Result<CTxDestination> dest{util::Error{}};
+        std::string error;
+
+        {
+            LOCK(pwallet->cs_wallet);
+            if (!pwallet->CanGetAddresses()) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Error: This wallet has no available keys");
+            }
+
+            dest = wallet->GetNewChangeDestination(output_type);
+            if (!dest) {
+                throw JSONRPCError(RPC_WALLET_KEYPOOL_RAN_OUT, util::ErrorString(dest).original);
+            }
+        }
+
+        if (!IsValidDestination(dest.value())) {
+            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Change address must be a valid bitcoin address");
+        }
+
+        // assign the change address
+        coin_control.destChange = dest.value();
+
+        coin_control.m_avoid_address_reuse = GetAvoidReuseFlag(*pwallet, request.params[7]);
+        // We also enable partial spend avoidance if reuse avoidance is set.
+        coin_control.m_avoid_partial_spends |= coin_control.m_avoid_address_reuse;
+
+        SetFeeEstimateMode(*pwallet, coin_control, /* conf_target */ request.params[5], /* estimate_mode */ request.params[6], /* fee_rate */ request.params[2], /* override_min_fee */ false);
+
+        auto amnt = request.params[1].get_real();
+
+
+        // No Wallet comments
+        mapValue_t mapValue;
+        mapValue["comment"] = "";
+        mapValue["to"] = "";
+
+        UniValue address_amounts(UniValue::VOBJ);
+        const std::string address = request.params[0].get_str();
+
+        // Parse address(s) tokenize on white space.
+        auto v_address = [](const std::string& input, const std::string& regex) -> std::vector<std::string>
+        {
+            std::regex re(regex);
+            std::sregex_token_iterator
+                first{input.begin(), input.end(), re, -1},
+                last;
+            return {first, last};
+        }(address, "\\s+");
+
+        // Use the same fee for all address(s)
+        for (auto a : v_address)
+        {
+            address_amounts.pushKV(a, request.params[1]);
+        }
+
+        UniValue subtractFeeFromAmount(UniValue::VARR); // ignore - not used
+
+        int64_t num_sends = 0;
+        if (!request.params[3].isNull()) {
+            num_sends = request.params[3].getInt<int>();
+        }
+        
+        // If 'check4_unconfirms_present' is true, only allow tx sending if there are no unconfirmed txs. This prevents bloating of the 
+        // wallet.dat because every new block would result in many abandoned txs if we send every block and abandon due to the 25 tx
+        // limit. This check makes it difficult to encounter that 25 limit shown here:
+        //      Bitcoin Core 0.12 also introduces new default policy limits on the length and size of unconfirmed transaction chains 
+        //      that are allowed in the mempool (generally limiting the length of unconfirmed chains to 25 transactions.
+        bool check4_unconfirms_present = false;
+        if (num_sends < 0 || request.params[3].isNull() )
+        {
+            // // default to run forever
+            num_sends = std::numeric_limits<int64_t>::max();
+            check4_unconfirms_present = true;
+        }
+
+        coin_control.m_signal_bip125_rbf = true; // force rbf
+        std::thread send_tx_thread([=]() {
+
+                try
+                {
+                    send_tx_thread_running.store(true, std::memory_order_relaxed);
+
+                    std::vector<CRecipient> recipients;
+                    ParseRecipients(address_amounts, subtractFeeFromAmount, recipients);
+                    const bool verbose{request.params[8].isNull() ? false : request.params[8].get_bool()};
+                    int height = 1;
+                    
+                    EnsureWalletIsUnlocked(*pwallet);
+
+                    int n = 1;
+                    while ((n<=num_sends) && (false==signal_tx_thread_stop.load(std::memory_order_relaxed)))
+                    {
+                        UninterruptibleSleep(std::chrono::milliseconds{1000});
+                        bool are_unconfirms = false;
+                        UniValue v;
+                        {
+                            LOCK(pwallet->cs_wallet);
+                            if (check4_unconfirms_present)
+                                are_unconfirms = unconfirms_present(pwallet);
+                            if (!are_unconfirms)
+                            {
+                                v = SendMoney(*pwallet, coin_control, recipients, mapValue, verbose);
+                                n++;
+                            }
+                        }
+                        
+                        std::string txid;
+                        if (v.isStr())
+                        {
+                            txid = v.get_str();
+                        }
+                        uint256 hash;
+                        bool is_abandoned = false; 
+                        
+                        if ( txid.size() > 0 )
+                        {
+                            hash = uint256S(txid.c_str());
+
+                            if (!pwallet->mapWallet.count(hash)) {
+                                // Invalid or non-wallet transaction id
+                                break;
+                            }
+                        }
+
+                        {
+                            LOCK(pwallet->cs_wallet);
+                            height = pwallet->GetLastBlockHeight();                            
+                            if (!hash.IsNull())
+                            {
+                                is_abandoned = pwallet->AbandonTransaction(hash);
+                            }
+                        }  
+
+                        while ( (are_unconfirms || is_abandoned) && (false==signal_tx_thread_stop.load(std::memory_order_relaxed)))
+                        {
+                            //"Transaction eligible for abandonment" -- just keep waiting
+                            UninterruptibleSleep(std::chrono::seconds{5});
+                            {
+                                LOCK(pwallet->cs_wallet);
+                                if (check4_unconfirms_present)
+                                    are_unconfirms = unconfirms_present(pwallet);                                
+
+                                if (height != pwallet->GetLastBlockHeight())
+                                {
+                                    // new block found! Try again.
+                                    break;
+                                }
+                            }                    
+                        }
+                    }
+
+                    // done.
+                    send_tx_thread_running.store(false, std::memory_order_relaxed);
+                }
+                catch(...)
+                {
+                    // done - bad happened
+                    send_tx_thread_running.store(false, std::memory_order_relaxed);
+                }
+            }
+        );
+
+        send_tx_thread.detach();
+
+    }
+    catch(...)
+    {
+        // stop thread and reset, something bad happened.
+        signal_tx_thread_stop.store(true, std::memory_order_relaxed);
+        // send back command initiated
+        return NullUniValue;        
+    }
+
+    // send back command initiated
+    return NullUniValue;
+},
+    };
+}
+
+RPCHelpMan txzap()
+{
+    return RPCHelpMan{"txzap",
+                "\nDeletes all unconfirmed txs from the wallet and restores your balance. Does not guarantee they won't be spent.\n"
+                "Also turns all unconfirmed txs that never made it into the mempool into an abandoned tx. This command serves as\n"
+                "an automated way to cleanup after not setting the tx fee high enough for miners to take and mine into the blockchain.\n"                
+                "Note: This is normally used in conjuntion with the 'tx' command when the user wants to remove all\n"
+                "previous low fee unconfirmed txs so they can increase the fee and send again.\n"
+                "Follow the steps shown below in the exact order:\n\n"
+                "1) txzap\n"
+                "2) Close your QT or node\n"
+                "3) Delete the mempool.dat file from the data directory\n"
+                "4) Start QT or the node with the    --rescan=1    argument\n"
+                "\nYour original balance will come back and the QUESTION MARKS (?) will no longer\n"
+                "be present. You can send txs again. The blockchain will protect from double spending.\n",
+                {},
+                RPCResult{RPCResult::Type::BOOL, "", "List of transactions that were removed from the wallet"},
+                RPCExamples{
+                    "\nZap away all unconfirmed transactions.\n"
+                    + HelpExampleCli("txzap", "")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+
+    std::shared_ptr<CWallet> const pwallet = GetWalletForJSONRPCRequest(request);
+    if (!pwallet) return NullUniValue;
+
+    CWallet& wallet = *pwallet;
+    // Make sure the results are valid at least up to the most recent block
+    // the user could have gotten from another RPC command prior to now
+    wallet.BlockUntilSyncedToCurrentChain();
+
+    LOCK(wallet.cs_wallet);
+
+    UniValue ret(UniValue::VARR);
+    ret.push_back("Removed the following txid(s):");
+
+    for (auto it = wallet.mapWallet.cbegin(); it != wallet.mapWallet.cend() /* not hoisted */; /* no increment */)
+        {
+            const CWalletTx& tx = it->second;
+
+            try
+            {
+                // Brute force try to zap all that are in mem pool or abandoned
+                if (tx.InMempool())
+                {
+                    uint256 hash(tx.GetHash());
+                    std::vector<uint256> vHash;
+                    vHash.push_back(hash);
+                    std::vector<uint256> vHashOut;
+
+                    if (wallet.ZapSelectTx(vHash, vHashOut) != DBErrors::LOAD_OK) {
+                        throw JSONRPCError(RPC_WALLET_ERROR, "Could not properly delete the transaction.");
+                    }
+
+                    if(vHashOut.empty()) {
+                        throw JSONRPCError(RPC_INVALID_PARAMETER, "Transaction does not exist in wallet.");
+                    }
+
+                    // Zapped from mempool
+                    UniValue o(UniValue::VOBJ);
+                    o.pushKV("txid", hash.GetHex());
+                    ret.push_back(o);           
+                    it = wallet.mapWallet.cbegin();     
+                }
+                else if (!tx.isAbandoned())
+                {
+                    uint256 hash(tx.GetHash());
+
+                    if (!pwallet->AbandonTransaction(hash)) {
+                        // Transaction not eligible for abandonment, this is normal, increment, catch and continue
+                        // to cleanup more.
+                         ++it;
+                        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Transaction not eligible for abandonment");
+                    }
+
+                    // Zapped and made abandoned
+                    UniValue o(UniValue::VOBJ);
+                    o.pushKV("txid", hash.GetHex());
+                    ret.push_back(o);           
+                    it = wallet.mapWallet.cbegin();     
+                }                
+                else
+                {
+                    ++it;
+                }
+            }
+            catch(...)
+            {
+            }
+        }
+
+    return ret;
+},
+    };
+}
+
 RPCHelpMan walletprocesspsbt()
 {
     return RPCHelpMan{"walletprocesspsbt",
@@ -1747,4 +2101,16 @@ RPCHelpMan walletcreatefundedpsbt()
 },
     };
 }
+
+bool unconfirms_present(const CWallet* const pwallet)
+{
+    CCoinControl cctl;
+    cctl.m_avoid_address_reuse = false;
+    cctl.m_min_depth = 0;
+    cctl.m_max_depth = 0;
+    auto results = AvailableCoins(*pwallet, &cctl);
+
+    return (results.coins.size() > 0);
+}
+
 } // namespace wallet

@@ -291,6 +291,8 @@ std::string LogCategoryToStr(BCLog::LogFlags category)
         return "txpackages";
     case BCLog::LogFlags::ALL:
         return "all";
+    case BCLog::LogFlags::COINSTAKE:
+        return "mining";
     }
     assert(false);
 }

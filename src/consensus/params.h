@@ -120,6 +120,12 @@ struct Params {
     uint256 nMinimumChainWork;
     /** By default assume that the signatures in ancestors of this block are valid */
     uint256 defaultAssumeValid;
+    /** Proof of stake parameters */
+    uint256 posLimit;
+    int nLastPOWBlock;
+    int nEnableHeaderSignatureHeight;
+    /** Block sync-checkpoint span*/
+    int nCheckpointSpan;
 
     /**
      * If true, witness commitments contain a payload equal to a Bitcoin Script solution

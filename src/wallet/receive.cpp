@@ -314,6 +314,13 @@ Balance GetBalance(const CWallet& wallet, const int min_depth, bool avoid_reuse)
             }
             ret.m_mine_immature += CachedTxGetImmatureCredit(wallet, wtx, ISMINE_SPENDABLE);
             ret.m_watchonly_immature += CachedTxGetImmatureCredit(wallet, wtx, ISMINE_WATCH_ONLY);
+
+            if (is_trusted && tx_depth >= COINBASE_MATURITY) {
+                ret.m_mine_stakeable += tx_credit_mine;
+            } else {
+                ret.m_mine_immature_stakeable += tx_credit_mine;
+            }
+
         }
     }
     return ret;

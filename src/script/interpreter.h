@@ -22,6 +22,8 @@ class CTransaction;
 class CTxOut;
 class uint256;
 
+typedef std::vector<unsigned char> valtype;
+
 /** Signature hash types/flags */
 enum
 {
@@ -147,6 +149,7 @@ enum : uint32_t {
 };
 
 bool CheckSignatureEncoding(const std::vector<unsigned char> &vchSig, unsigned int flags, ScriptError* serror);
+bool IsCompressedOrUncompressedPubKey(const std::vector<unsigned char> &vchPubKey);
 
 struct PrecomputedTransactionData
 {

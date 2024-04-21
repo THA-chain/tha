@@ -22,7 +22,7 @@
  * current network-adjusted time before the block will be accepted.
  */
 static constexpr int64_t MAX_FUTURE_BLOCK_TIME = 2 * 60 * 60;
-
+static constexpr int64_t MAX_FUTURE_BLOCK_TIME_POS = 15;
 /**
  * Timestamp window used as a grace period by code that compares external
  * timestamps (such as timestamps passed to RPCs, or wallet key creation times)
@@ -200,11 +200,48 @@ public:
     uint32_t nBits{0};
     uint32_t nNonce{0};
 
+    // Proof of stake
+    COutPoint prevoutStake;
+    // block signature - proof-of-stake protect the block by signing the block using a stake holder private key
+    std::vector<unsigned char> vchBlockSig;
+    uint256 nStakeModifier;
+    uint256 hashProof;
+    uint64_t nMoneySupply;
+
     //! (memory only) Sequential id assigned to distinguish order in which blocks are received.
     int32_t nSequenceId{0};
 
     //! (memory only) Maximum nTime in the chain up to and including this block.
     unsigned int nTimeMax{0};
+
+    void SetNull()
+    {
+        phashBlock = nullptr;
+        pprev = nullptr;
+        //pnext = nullptr;
+        pskip = nullptr;
+        nHeight = 0;
+        nFile = 0;
+        nDataPos = 0;
+        nUndoPos = 0;
+        nChainWork = arith_uint256();
+        nTx = 0;
+        nChainTx = 0;
+        nStatus = 0;
+        nSequenceId = 0;
+        nTimeMax = 0;
+
+        nVersion       = 0;
+        hashMerkleRoot = uint256();
+        nTime          = 0;
+        nBits          = 0;
+        nNonce         = 0;
+        prevoutStake.SetNull();
+        vchBlockSig.clear();
+        nStakeModifier = uint256();
+        hashProof = uint256();
+        nMoneySupply = 0;
+    }
 
     explicit CBlockIndex(const CBlockHeader& block)
         : nVersion{block.nVersion},
@@ -213,6 +250,18 @@ public:
           nBits{block.nBits},
           nNonce{block.nNonce}
     {
+        SetNull();
+
+        nVersion       = block.nVersion;
+        hashMerkleRoot = block.hashMerkleRoot;
+        nTime          = block.nTime;
+        nBits          = block.nBits;
+        nNonce         = block.nNonce;
+        prevoutStake   = block.prevoutStake;
+        vchBlockSig    = block.vchBlockSig;
+        nStakeModifier = uint256();
+        hashProof = uint256();
+        nMoneySupply   = 0;
     }
 
     FlatFilePos GetBlockPos() const EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
@@ -247,6 +296,8 @@ public:
         block.nTime = nTime;
         block.nBits = nBits;
         block.nNonce = nNonce;
+        block.vchBlockSig = vchBlockSig;
+        block.prevoutStake = prevoutStake;
         return block;
     }
 
@@ -274,6 +325,15 @@ public:
         return NodeSeconds{std::chrono::seconds{nTime}};
     }
 
+    /**
+     * Check whether this block's and all previous blocks' transactions have been
+     * downloaded (and stored to disk) at some point.
+     *
+     * Does not imply the transactions are consensus-valid (ConnectTip might fail)
+     * Does not imply the transactions are still stored on disk. (IsBlockPruned might return true)
+     */
+    bool HaveTxsDownloaded() const { return nChainTx != 0; }
+
     int64_t GetBlockTime() const
     {
         return (int64_t)nTime;
@@ -298,6 +358,16 @@ public:
 
         std::sort(pbegin, pend);
         return pbegin[(pend - pbegin) / 2];
+    }
+
+    bool IsProofOfWork() const
+    {
+        return nNonce != 0xD0D0FACE;
+    }
+
+    bool IsProofOfStake() const
+    {
+        return nNonce == 0xD0D0FACE;
     }
 
     std::string ToString() const;
@@ -419,6 +489,11 @@ public:
         READWRITE(obj.nTime);
         READWRITE(obj.nBits);
         READWRITE(obj.nNonce);
+        READWRITE(obj.prevoutStake);
+        READWRITE(obj.vchBlockSig);
+        READWRITE(obj.nStakeModifier);
+        READWRITE(obj.hashProof);
+        READWRITE(VARINT(obj.nMoneySupply));
     }
 
     uint256 ConstructBlockHash() const
@@ -430,10 +505,25 @@ public:
         block.nTime = nTime;
         block.nBits = nBits;
         block.nNonce = nNonce;
+        block.prevoutStake = prevoutStake;
+        block.vchBlockSig = vchBlockSig;
         return block.GetHash();
     }
 
-    uint256 GetBlockHash() = delete;
+    uint256 GetBlockHash() const
+    {
+        CBlockHeader block;
+        block.nVersion        = nVersion;
+        block.hashPrevBlock   = hashPrev;
+        block.hashMerkleRoot  = hashMerkleRoot;
+        block.nTime           = nTime;
+        block.nBits           = nBits;
+        block.nNonce          = nNonce;
+        block.prevoutStake    = prevoutStake;
+        block.vchBlockSig     = vchBlockSig;
+        return block.GetHash();
+    }
+
     std::string ToString() = delete;
 };
 

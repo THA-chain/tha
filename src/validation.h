@@ -23,6 +23,10 @@
 #include <policy/feerate.h>
 #include <policy/packages.h>
 #include <policy/policy.h>
+#include <wallet/wallet.h>
+#include <wallet/transaction.h>
+#include <pos.h>
+#include <pow.h>
 #include <script/script_error.h>
 #include <sync.h>
 #include <txdb.h>
@@ -97,6 +101,15 @@ extern uint256 g_best_block;
 
 /** Documentation for argument 'checklevel'. */
 extern const std::vector<std::string> CHECKLEVEL_DOC;
+
+extern ChainstateManager *gp_chainman;
+extern kernel::BlockTreeDB *gp_blocktree;
+
+inline int64_t FutureDrift(uint32_t nTime) { return nTime + 15; }
+
+//typedef std::unordered_map<uint256, CBlockIndex*, BlockHasher> BlockMap;
+typedef std::set<std::pair<COutPoint, unsigned int>> StakeSeenSet;
+
 
 /** Run instances of script checking worker threads */
 void StartScriptCheckWorkerThreads(int threads_num);
@@ -345,7 +358,7 @@ static_assert(std::is_nothrow_destructible_v<CScriptCheck>);
 /** Functions for validating blocks and updating the block tree */
 
 /** Context-independent validity checks */
-bool CheckBlock(const CBlock& block, BlockValidationState& state, const Consensus::Params& consensusParams, bool fCheckPOW = true, bool fCheckMerkleRoot = true);
+bool CheckBlock(const CBlock& block, BlockValidationState& state, const Consensus::Params& consensusParams, bool fCheckPOW = true, bool fCheckMerkleRoot = true, bool fCheckSig = true);
 
 /** Check a block is completely valid from start to finish (only works on top of our current best block) */
 bool TestBlockValidity(BlockValidationState& state,
@@ -826,6 +839,12 @@ enum class SnapshotCompletionResult {
  */
 class ChainstateManager
 {
+public:
+
+    //! Points to either the ibd or snapshot chainstate; indicates our
+    //! most-work chain.
+    Chainstate* m_active_chainstate GUARDED_BY(::cs_main) {nullptr};
+
 private:
     //! The chainstate used under normal operation (i.e. "regular" IBD) or, if
     //! a snapshot is in use, for background validation.
@@ -857,9 +876,9 @@ private:
     //! prevent code from using the pointer while deleting it.
     std::unique_ptr<Chainstate> m_snapshot_chainstate GUARDED_BY(::cs_main);
 
-    //! Points to either the ibd or snapshot chainstate; indicates our
-    //! most-work chain.
-    Chainstate* m_active_chainstate GUARDED_BY(::cs_main) {nullptr};
+    // //! Points to either the ibd or snapshot chainstate; indicates our
+    // //! most-work chain.
+    // Chainstate* m_active_chainstate GUARDED_BY(::cs_main) {nullptr};
 
     CBlockIndex* m_best_invalid GUARDED_BY(::cs_main){nullptr};
 
@@ -896,6 +915,10 @@ private:
     bool IsUsable(const Chainstate* const cs) const EXCLUSIVE_LOCKS_REQUIRED(::cs_main) {
         return cs && !cs->m_disabled;
     }
+
+    // For access to m_active_chainstate.
+    friend Chainstate *ChainstateActive();
+    // friend CChain& ChainActive();
 
 public:
     using Options = kernel::ChainstateManagerOpts;
@@ -1193,8 +1216,11 @@ public:
     /** Update uncommitted block structures (currently: only the witness reserved value). This is safe for submitted blocks. */
     void UpdateUncommittedBlockStructures(CBlock& block, const CBlockIndex* pindexPrev) const;
 
+
+    bool UpdateHashProof(const CBlock& block, BlockValidationState& state, const Consensus::Params& consensusParams, CBlockIndex* pindex, CCoinsViewCache& view);
+
     /** Produce the necessary coinbase commitment for a block (modifies the hash, don't call for mined blocks). */
-    std::vector<unsigned char> GenerateCoinbaseCommitment(CBlock& block, const CBlockIndex* pindexPrev) const;
+    std::vector<unsigned char> GenerateCoinbaseCommitment(CBlock& block, const CBlockIndex* pindexPrev, bool fProofOfStake=false) const;
 
     /** This is used by net_processing to report pre-synchronization progress of headers, as
      *  headers are not yet fed to validation during that time, but validation is (for now)
@@ -1250,6 +1276,26 @@ public:
     ~ChainstateManager();
 };
 
+/** DEPRECATED! Please use node.chainman instead. May only be used in validation.cpp internally */
+extern ChainstateManager *gp_chainman GUARDED_BY(::cs_main);
+
+/** Global variable that points to the active block tree (protected by cs_main) */
+extern kernel::BlockTreeDB *gp_blocktree;
+
+/** Please prefer the identical ChainstateManager::ActiveChainstate */
+Chainstate *ChainstateActive();
+
+/** Please prefer the identical ChainstateManager::ActiveChain */
+Chainstate *ChainstateActive();
+CChain& ChainActive();
+
+
+// /** @returns the global block index map. */
+// BlockMap& BlockIndex();
+
+/** @returns the global stake seen set. */
+StakeSeenSet& StakeSeen();
+
 /** Deployment* info via ChainstateManager */
 template<typename DEP>
 bool DeploymentActiveAfter(const CBlockIndex* pindexPrev, const ChainstateManager& chainman, DEP dep)
@@ -1274,5 +1320,57 @@ bool IsBIP30Repeat(const CBlockIndex& block_index);
 
 /** Identifies blocks which coinbase output was subsequently overwritten in the UTXO set (see BIP30) */
 bool IsBIP30Unspendable(const CBlockIndex& block_index);
+
+/** @returns the global block index map. */
+node::BlockMap& BlockIndex();
+
+bool CheckReward(const CBlock& block, BlockValidationState& state, int nHeight, const Consensus::Params& consensusParams, CAmount nFees, CAmount nActualStakeReward);
+bool RemoveStateBlockIndex(CBlockIndex *pindex);
+bool GetBlockPublicKey(const CBlock& block, std::vector<unsigned char>& vchPubKey);
+bool GetSpentCoinFromBlock(const CBlockIndex* pindex, COutPoint prevout, Coin* coin);
+bool GetSpentCoinFromMainChain(const CBlockIndex* pforkPrev, COutPoint prevoutStake, Coin* coin);
+bool CheckHeaderPoW(const CBlockHeader& block, const Consensus::Params& consensusParams);
+bool CheckHeaderPoS(const CBlockHeader& block, CBlockIndex* pindex, CCoinsViewCache& view);
+bool CheckHeaderProof(const CBlockHeader& block, const Consensus::Params& consensusParams);
+bool CheckIndexProof(const CBlockIndex& block, const Consensus::Params& consensusParams);
+
+#ifdef ENABLE_WALLET
+/* Sign a block */
+bool SignBlock(ChainstateManager& chainman, std::shared_ptr<CBlock> pblock, wallet::CWallet& wallet, const CAmount& nTotalFees, uint32_t nTime, uint32_t nNonce, std::set<std::pair<const wallet::CWalletTx*,unsigned int>> &setCoins);
+#endif
+
+struct CHeightTxIndexKey {
+    unsigned int height;
+    uint160 address;
+
+    size_t GetSerializeSize(int nType, int nVersion) const {
+        return 24;
+    }
+    template<typename Stream>
+    void Serialize(Stream& s) const {
+        ser_writedata32be(s, height);
+        address.Serialize(s);
+    }
+    template<typename Stream>
+    void Unserialize(Stream& s) {
+        height = ser_readdata32be(s);
+        address.Unserialize(s);
+    }
+
+    CHeightTxIndexKey(unsigned int _height, uint160 _address) {
+        height = _height;
+        address = _address;
+    }
+
+    CHeightTxIndexKey() {
+        SetNull();
+    }
+
+    void SetNull() {
+        height = 0;
+        address.SetNull();
+    }
+};
+
 
 #endif // BITCOIN_VALIDATION_H

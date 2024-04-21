@@ -14,7 +14,8 @@
 #include <util/check.h>
 #include <util/insert.h>
 #include <util/result.h>
-
+#include <wallet/transaction.h>
+#include <wallet/walletdb.h>
 #include <optional>
 
 
@@ -75,6 +76,13 @@ public:
     /** The fee necessary to bump this UTXO's ancestor transactions to the target feerate */
     CAmount ancestor_bump_fees{0};
 
+    const CWalletTx *tx;
+    int i;
+
+    /** Whether to use the maximum sized, 72 byte signature when calculating the size of the input spend. This should only be set when watch-only outputs are allowed */
+    bool use_max_sig;
+
+
     COutput(const COutPoint& outpoint, const CTxOut& txout, int depth, int input_bytes, bool spendable, bool solvable, bool safe, int64_t time, bool from_me, const std::optional<CFeeRate> feerate = std::nullopt)
         : outpoint{outpoint},
           txout{txout},
@@ -101,6 +109,16 @@ public:
         fee = fees;
         effective_value = txout.nValue - fee.value();
     }
+
+    COutput(const CWalletTx *txIn, int iIn) //, int nDepthIn, bool fSpendableIn, bool fSolvableIn, bool fSafeIn, bool use_max_sig_in = false)
+    {
+        tx = txIn; i = iIn; //depth = nDepthIn; spendable = fSpendableIn; solvable = fSolvableIn; safe = fSafeIn; input_bytes = -1; use_max_sig = use_max_sig_in;
+        // If known and signable by the given wallet, compute nInputBytes
+        // Failure will keep this value -1
+        // if (spendable && tx) {
+        //     input_bytes = tx->GetSpendSize(i, use_max_sig);
+        // }
+    }    
 
     std::string ToString() const;
 

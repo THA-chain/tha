@@ -128,6 +128,8 @@ public:
         }
     }
     bool shutdownRequested() override { return ShutdownRequested(); }
+    bool wasShutdownRequested() override { return WasShutdownRequested(); }
+
     bool isSettingIgnored(const std::string& name) override
     {
         bool ignored = false;

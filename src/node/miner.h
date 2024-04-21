@@ -20,12 +20,18 @@
 #include <boost/multi_index/tag.hpp>
 #include <boost/multi_index_container.hpp>
 
+#ifdef ENABLE_WALLET
+#include <wallet/wallet.h>
+#include <net.h>
+#endif
+
 class ArgsManager;
 class CBlockIndex;
 class CChainParams;
 class CScript;
 class Chainstate;
 class ChainstateManager;
+class CConnman;
 
 namespace Consensus { struct Params; };
 
@@ -166,7 +172,7 @@ public:
 
     /** Construct a new block template with coinbase to scriptPubKeyIn */
     std::unique_ptr<CBlockTemplate> CreateNewBlock(const CScript& scriptPubKeyIn);
-
+    std::unique_ptr<CBlockTemplate> CreateNewBlock(const CScript& scriptPubKeyIn, bool fProofOfStake, int64_t* pTotalFees = 0, int32_t nTime = 0, bool fAddTxs = true);
     inline static std::optional<int64_t> m_last_block_num_txs{};
     inline static std::optional<int64_t> m_last_block_weight{};
 
@@ -206,6 +212,9 @@ void RegenerateCommitments(CBlock& block, ChainstateManager& chainman);
 
 /** Apply -blockmintxfee and -blockmaxweight options from ArgsManager to BlockAssembler options. */
 void ApplyArgsManOptions(const ArgsManager& gArgs, BlockAssembler::Options& options);
+
+void ThreadStakeMiner(wallet::CWallet& wallet, CConnman& connman, ChainstateManager& chainman, const CTxMemPool& mempool);
+
 } // namespace node
 
 #endif // BITCOIN_NODE_MINER_H

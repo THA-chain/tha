@@ -9,12 +9,15 @@
 #include <logging.h>
 #include <util/check.h>
 #include <util/signalinterrupt.h>
-
+#include <wallet/wallet.h>
 #include <assert.h>
 #include <system_error>
 
+static bool shutdown_requested = false;
 void StartShutdown()
 {
+    shutdown_requested = true;
+    s_mining_thread_exiting.store(true, std::memory_order_relaxed);
     try {
         Assert(kernel::g_context)->interrupt();
     } catch (const std::system_error&) {
@@ -31,6 +34,11 @@ void AbortShutdown()
 bool ShutdownRequested()
 {
     return bool{Assert(kernel::g_context)->interrupt};
+}
+
+bool WasShutdownRequested() 
+{
+    return shutdown_requested;
 }
 
 void WaitForShutdown()

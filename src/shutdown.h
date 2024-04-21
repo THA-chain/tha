@@ -17,6 +17,8 @@ void AbortShutdown();
 /** Returns true if a shutdown is requested, false otherwise. */
 bool ShutdownRequested();
 
+bool WasShutdownRequested();
+
 /** Wait for StartShutdown to be called in any thread. This can only be used
  * from a single thread.
  */

@@ -5,6 +5,7 @@
 
 #include <chain.h>
 #include <chainparams.h>
+#include <common/args.h>
 #include <common/system.h>
 #include <consensus/amount.h>
 #include <consensus/consensus.h>
@@ -37,7 +38,9 @@
 #include <validation.h>
 #include <validationinterface.h>
 #include <warnings.h>
-
+#include <wallet/wallet.h>
+#include <wallet/rpc/util.h>
+#include <node/miner.h>
 #include <memory>
 #include <stdint.h>
 
@@ -87,7 +90,7 @@ static UniValue GetNetworkHashPS(int lookup, int height, const CChain& active_ch
     arith_uint256 workDiff = pb->nChainWork - pb0->nChainWork;
     int64_t timeDiff = maxTime - minTime;
 
-    return workDiff.getdouble() / timeDiff;
+    return workDiff.getdouble() / timeDiff / POW_POT_DIFF_HELPER;
 }
 
 static RPCHelpMan getnetworkhashps()
@@ -235,11 +238,69 @@ static RPCHelpMan generatetodescriptor()
     };
 }
 
+extern wallet::CWallet *gp_wallet;
 static RPCHelpMan generate()
 {
-    return RPCHelpMan{"generate", "has been replaced by the -generate cli option. Refer to -help for more information.", {}, {}, RPCExamples{""}, [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue {
-        throw JSONRPCError(RPC_METHOD_NOT_FOUND, self.ToString());
-    }};
+    return RPCHelpMan{"generate",
+        "Mine to a any address",
+         {
+         },
+         RPCResult{"Status", RPCResult::Type::NONE, "", ""},
+         RPCExamples{
+            "\nGenerate blocks to any address. This is the new way to mine THA.\nMining is single threaded and uses only one wallet.\nMining can be stopped in the following ways:\n-Use the lightning icon in the GUI.\n-Close the wallet.\n-Close the node.\n\nTo start mining again, use this rpc command.\n"
+            + HelpExampleCli("generate", "")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    static NodeContext& node = EnsureAnyNodeContext(request.context);
+    static const CTxMemPool& mempool = EnsureMemPool(node);
+    static ChainstateManager& chainman = EnsureChainman(node);
+    static CConnman& connman = EnsureConnman(node);
+    static std::atomic<bool> invoked{false};
+
+    UniValue ret(UniValue::VARR);
+    
+    if (gp_wallet)
+    {
+        if ( invoked.load(std::memory_order_relaxed) )
+        {
+            ret.push_back("Mining already in progress. Use lightning icon on GUI to stop mining or shutdown node to stop mining.");
+            return ret;
+        }
+
+        gp_wallet->BlockUntilSyncedToCurrentChain();
+        ret.push_back("Mining started. Use lightning icon on GUI to stop mining or shutdown node to stop mining.");
+
+        invoked.store(true, std::memory_order_relaxed);
+        std::thread mining_thread([=]() {
+                // If exception is thrown, try to mine again.
+                while (true)
+                {
+                    try
+                    {
+                        node::ThreadStakeMiner(*gp_wallet, connman, chainman, mempool);
+                        invoked.store(false, std::memory_order_relaxed);
+                        break; // completed naturally, break out
+                    }
+                    catch(...)
+                    {
+                        // try again in loop
+                    }
+                }
+            }
+        );
+
+        mining_thread.detach();
+
+    }
+    else
+    {
+        ret.push_back("Mining not started - wallet not loaded.");
+    }
+
+    return ret;
+},
+    };
 }
 
 static RPCHelpMan generatetoaddress()
@@ -412,6 +473,9 @@ static RPCHelpMan getmininginfo()
                         {RPCResult::Type::NUM, "currentblocktx", /*optional=*/true, "The number of block transactions of the last assembled block (only present if a block was ever assembled)"},
                         {RPCResult::Type::NUM, "difficulty", "The current difficulty"},
                         {RPCResult::Type::NUM, "networkhashps", "The network hashes per second"},
+                        {RPCResult::Type::NUM, "localhashps", "The local miner's hashes per second"},
+                        {RPCResult::Type::NUM, "daystofind", "The estimated days for miner to mine a block."},
+                        {RPCResult::Type::NUM, "cpuloadingpercent", "The CPU loading percent"},
                         {RPCResult::Type::NUM, "pooledtx", "The size of the mempool"},
                         {RPCResult::Type::STR, "chain", "current network name (main, test, signet, regtest)"},
                         {RPCResult::Type::STR, "warnings", "any network and blockchain warnings"},
@@ -434,6 +498,19 @@ static RPCHelpMan getmininginfo()
     if (BlockAssembler::m_last_block_num_txs) obj.pushKV("currentblocktx", *BlockAssembler::m_last_block_num_txs);
     obj.pushKV("difficulty",       (double)GetDifficulty(active_chain.Tip()));
     obj.pushKV("networkhashps",    getnetworkhashps().HandleRequest(request));
+    obj.pushKV("localhashps",      wallet::getHashesPerSecond());
+    double net = getnetworkhashps().HandleRequest(request).get_real();
+    double local = wallet::getHashesPerSecond();
+    if ( 0 == local )
+    {
+        obj.pushKV("daystofind", "never"); 
+    }
+    else
+    {
+        double days = net/(144*local); // 150 blocks per day may be more accurate since hashrate keeps increasing, but this is close enough.
+        obj.pushKV("daystofind",       days);  
+    }
+    obj.pushKV("cpuloadingpercent", wallet::getCpuLoading());
     obj.pushKV("pooledtx",         (uint64_t)mempool.size());
     obj.pushKV("chain", chainman.GetParams().GetChainTypeString());
     obj.pushKV("warnings",         GetWarnings(false).original);
@@ -443,7 +520,7 @@ static RPCHelpMan getmininginfo()
 }
 
 
-// NOTE: Unlike wallet RPC (which use BTC values), mining RPCs follow GBT (BIP 22) in using satoshi amounts
+// NOTE: Unlike wallet RPC (which use THA values), mining RPCs follow GBT (BIP 22) in using satoshi amounts
 static RPCHelpMan prioritisetransaction()
 {
     return RPCHelpMan{"prioritisetransaction",
@@ -791,7 +868,8 @@ static RPCHelpMan getblocktemplate()
 
         // Create new block
         CScript scriptDummy = CScript() << OP_TRUE;
-        pblocktemplate = BlockAssembler{active_chainstate, &mempool}.CreateNewBlock(scriptDummy);
+        int64_t nTotalFees;
+        pblocktemplate = BlockAssembler{active_chainstate, &mempool}.CreateNewBlock(scriptDummy, true, &nTotalFees, 0);
         if (!pblocktemplate)
             throw JSONRPCError(RPC_OUT_OF_MEMORY, "Out of memory");
 
@@ -1093,7 +1171,7 @@ void RegisterMiningRPCCommands(CRPCTable& t)
         {"hidden", &generatetoaddress},
         {"hidden", &generatetodescriptor},
         {"hidden", &generateblock},
-        {"hidden", &generate},
+        {"mining", &generate},
     };
     for (const auto& c : commands) {
         t.appendCommand(c.name, &c);

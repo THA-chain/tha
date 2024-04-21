@@ -9,6 +9,7 @@
 #include <consensus/amount.h>
 #include <consensus/merkle.h>
 #include <consensus/params.h>
+#include <consensus/consensus.h>
 #include <hash.h>
 #include <kernel/messagestartchars.h>
 #include <logging.h>
@@ -25,6 +26,8 @@
 #include <cstdint>
 #include <cstring>
 #include <type_traits>
+
+#include <arith_uint256.h>
 
 static CBlock CreateGenesisBlock(const char* pszTimestamp, const CScript& genesisOutputScript, uint32_t nTime, uint32_t nNonce, uint32_t nBits, int32_t nVersion, const CAmount& genesisReward)
 {
@@ -58,9 +61,32 @@ static CBlock CreateGenesisBlock(const char* pszTimestamp, const CScript& genesi
  *     CTxOut(nValue=50.00000000, scriptPubKey=0x5F1DF16B2B704C8A578D0B)
  *   vMerkleTree: 4a5e1e
  */
+
+static bool CheckProofOfWork(uint256 hash, unsigned int nBits, const Consensus::Params& params)
+{
+    bool fNegative;
+    bool fOverflow;
+    arith_uint256 bnTarget;
+
+    bnTarget.SetCompact(nBits, &fNegative, &fOverflow);
+
+    //std::cout << " bnTarget = " << bnTarget.ToString() << std::endl;
+
+    // Check range
+    if (fNegative || bnTarget == 0 || fOverflow || bnTarget > UintToArith256(params.powLimit))
+        return false;
+
+    // Check proof of work matches claimed amount
+    if (UintToArith256(hash) > bnTarget)
+        return false;
+
+    return true;
+}
+
 static CBlock CreateGenesisBlock(uint32_t nTime, uint32_t nNonce, uint32_t nBits, int32_t nVersion, const CAmount& genesisReward)
 {
-    const char* pszTimestamp = "The Times 03/Jan/2009 Chancellor on brink of second bailout for banks";
+    //const char* pszTimestamp = "The Times 03/Jan/2009 Chancellor on brink of second bailout for banks";
+    const char* pszTimestamp = "Decentralized and fair";
     const CScript genesisOutputScript = CScript() << ParseHex("04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5f") << OP_CHECKSIG;
     return CreateGenesisBlock(pszTimestamp, genesisOutputScript, nTime, nNonce, nBits, nVersion, genesisReward);
 }
@@ -85,10 +111,16 @@ public:
         consensus.powLimit = uint256S("00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 14 * 24 * 60 * 60; // two weeks
         consensus.nPowTargetSpacing = 10 * 60;
+        consensus.posLimit = uint256S("00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.fPowAllowMinDifficultyBlocks = false;
         consensus.fPowNoRetargeting = false;
         consensus.nRuleChangeActivationThreshold = 1815; // 90% of 2016
         consensus.nMinerConfirmationWindow = 2016; // nPowTargetTimespan / nPowTargetSpacing
+
+        consensus.nLastPOWBlock = 10;
+        consensus.nEnableHeaderSignatureHeight = 0;
+        consensus.nCheckpointSpan = COINBASE_MATURITY;
+
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].bit = 28;
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nStartTime = Consensus::BIP9Deployment::NEVER_ACTIVE;
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
@@ -97,8 +129,8 @@ public:
         // Deployment of Taproot (BIPs 340-342)
         consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].bit = 2;
         consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nStartTime = 1619222400; // April 24th, 2021
-        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nTimeout = 1628640000; // August 11th, 2021
-        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].min_activation_height = 709632; // Approximately November 12th, 2021
+        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nTimeout = 1776261600; // April 15th, 2026
+        consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].min_activation_height = 0; // Approximately May 2024
 
         consensus.nMinimumChainWork = uint256{};
         consensus.defaultAssumeValid = uint256{};
@@ -117,10 +149,66 @@ public:
         m_assumed_blockchain_size = 0;
         m_assumed_chain_state_size = 0;
 
-        genesis = CreateGenesisBlock(1231006505, 2083236893, 0x1d00ffff, 1, 50 * COIN);
+
+/*
+
+// MINING GENESIS - MAINNET
+        uint32_t nTime=1713823241;
+        uint32_t nNonce=177259754;
+       
+        // @"consensus.hashGenesisBlock: 000000004c2738ff52ee6dc039d4fde2f3292fed9afa9d712f895d7094f8d350\r\n"
+        // @"genesis.hashMerkleRoot: c36c4216baf256beb34d939e7aa158a54b7488be996e8bdab8d83ff9c73f1f4d\r\n"
+        // @"genesis.nNonce: 771851678\r\n"
+        // Difficulty bits:
+        // Using following formula target can be obtained from any block. For example if a target packed in a block appears as 0x1b0404cb its hexadecimal version will look as following:
+        // 0x0404cb * 2**(8*(0x1b - 3)) = 0x00000000000404CB000000000000000000000000000000000000000000000000
+        bool proof_of_work_valid = false;
+        uint256 lowest_hash = uint256S("ffffffffff19d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f");
+        for (nTime=1713823241; ;nTime++)
+        {
+            genesis = CreateGenesisBlock(nTime, nNonce, 0x1d00ffff, 1, 50 * COIN);
+            //genesis = CreateGenesisBlock(nTime, nNonce, 0x1e00ffff, 1, 50 * COIN);
+
+            for (genesis.nNonce = 177259754; genesis.nNonce <= 0xfffffff0;genesis.nNonce++)
+            {
+                uint256 genhash = genesis.GetHash();
+                proof_of_work_valid = CheckProofOfWork(genhash, genesis.nBits, consensus);
+                if (proof_of_work_valid) {
+                    break;
+                }
+
+                if (UintToArith256(genhash) < UintToArith256(lowest_hash))
+                    lowest_hash = genhash;
+
+                if (genesis.nNonce % 2000000 == 0)
+                    std::cout << "STILL NOTHING time: " << nTime << " nonce: " << genesis.nNonce << " lowest hash: " << lowest_hash.ToString() << " pow limit: " << consensus.powLimit.ToString() << std::endl;
+
+            }
+            if (proof_of_work_valid) {
+                break;
+            }
+
+            std::cout << "time: " << nTime << std::endl;
+        }
+
+        
         consensus.hashGenesisBlock = genesis.GetHash();
-        assert(consensus.hashGenesisBlock == uint256S("0x000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f"));
-        assert(genesis.hashMerkleRoot == uint256S("0x4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"));
+        // std::cout << "consensus.hashGenesisBlock: " << consensus.hashGenesisBlock.ToString() << std::endl;
+        // std::cout << "genesis.hashMerkleRoot: " << genesis.hashMerkleRoot.ToString() << std::endl;   
+        // std::cout << "genesis.nNonce: " << genesis.nNonce << std::endl;
+        // std::cout << "genesis.nTime: " << nTime << std::endl;
+
+
+        std::cout << genesis.ToString() << std::endl;
+
+        exit(1);
+
+*/
+
+        genesis = CreateGenesisBlock(1713823241, 177259754, 0x1d00ffff, 1, 50 * COIN);
+        consensus.hashGenesisBlock = genesis.GetHash();
+        assert(consensus.hashGenesisBlock == uint256S("0x00000000c80a80efa43810b7e7c77571071a5ff05626e9e6d7d26f3b6c9fac69"));
+        assert(genesis.hashMerkleRoot == uint256S("0xe8c8cc27e8be80d8d5d0b681881edfce4736a9c036d0f939d6802af3ae8102ac"));
 
         base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,0);
         base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1,5);
@@ -138,7 +226,7 @@ public:
 
         checkpointData = {
             {
-                { 0, uint256S("0x000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f")},
+                { 0, uint256S("0x00000000c80a80efa43810b7e7c77571071a5ff05626e9e6d7d26f3b6c9fac69")},
             }
         };
 
@@ -201,10 +289,68 @@ public:
         m_assumed_blockchain_size = 0;
         m_assumed_chain_state_size = 0;
 
-        genesis = CreateGenesisBlock(1296688602, 414098458, 0x1d00ffff, 1, 50 * COIN);
+/*
+
+// MINING GENESIS - TESTNET
+        uint32_t nTime=1713817130;
+        uint32_t nNonce=575844624;
+       
+        // @"consensus.hashGenesisBlock: 000000004c2738ff52ee6dc039d4fde2f3292fed9afa9d712f895d7094f8d350\r\n"
+        // @"genesis.hashMerkleRoot: c36c4216baf256beb34d939e7aa158a54b7488be996e8bdab8d83ff9c73f1f4d\r\n"
+        // @"genesis.nNonce: 771851678\r\n"
+        // Difficulty bits:
+        // Using following formula target can be obtained from any block. For example if a target packed in a block appears as 0x1b0404cb its hexadecimal version will look as following:
+        // 0x0404cb * 2**(8*(0x1b - 3)) = 0x00000000000404CB000000000000000000000000000000000000000000000000
+        bool proof_of_work_valid = false;
+        uint256 lowest_hash = uint256S("ffffffffff19d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f");
+        for (nTime=1713817130; ;nTime++)
+        {
+            genesis = CreateGenesisBlock(nTime, nNonce, 0x1d00ffff, 1, 50 * COIN);
+            //genesis = CreateGenesisBlock(nTime, nNonce, 0x1e00ffff, 1, 50 * COIN);
+
+            for (genesis.nNonce = 575844624; genesis.nNonce <= 0xfffffff0;genesis.nNonce++)
+            {
+                uint256 genhash = genesis.GetHash();
+                proof_of_work_valid = CheckProofOfWork(genhash, genesis.nBits, consensus);
+                if (proof_of_work_valid) {
+                    break;
+                }
+
+                if (UintToArith256(genhash) < UintToArith256(lowest_hash))
+                    lowest_hash = genhash;
+
+                if (genesis.nNonce % 2000000 == 0)
+                    std::cout << "STILL NOTHING time: " << nTime << " nonce: " << genesis.nNonce << " lowest hash: " << lowest_hash.ToString() << " pow limit: " << consensus.powLimit.ToString() << std::endl;
+
+            }
+            if (proof_of_work_valid) {
+                break;
+            }
+
+            std::cout << "time: " << nTime << std::endl;
+        }
+
+        
         consensus.hashGenesisBlock = genesis.GetHash();
-        assert(consensus.hashGenesisBlock == uint256S("0x000000000933ea01ad0ee984209779baaec3ced90fa3f408719526f8d77f4943"));
-        assert(genesis.hashMerkleRoot == uint256S("0x4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"));
+        // std::cout << "consensus.hashGenesisBlock: " << consensus.hashGenesisBlock.ToString() << std::endl;
+        // std::cout << "genesis.hashMerkleRoot: " << genesis.hashMerkleRoot.ToString() << std::endl;   
+        // std::cout << "genesis.nNonce: " << genesis.nNonce << std::endl;
+        // std::cout << "genesis.nTime: " << nTime << std::endl;
+
+
+        std::cout << std::endl << "TESTNET " << genesis.ToString() << std::endl;
+
+        exit(1);
+
+
+
+*/
+
+
+        genesis = CreateGenesisBlock(1713817130, 575844624, 0x1d00ffff, 1, 50 * COIN);
+        consensus.hashGenesisBlock = genesis.GetHash();
+        assert(consensus.hashGenesisBlock == uint256S("0x00000000efc68a6dd7a0f1786c829d79dce44f3cd0385787121a4d60b255b0fc"));
+        assert(genesis.hashMerkleRoot == uint256S("0xe8c8cc27e8be80d8d5d0b681881edfce4736a9c036d0f939d6802af3ae8102ac"));
 
         vFixedSeeds.clear();
         vSeeds.clear();
@@ -323,10 +469,68 @@ public:
         nDefaultPort = 37222;
         nPruneAfterHeight = 1000;
 
-        genesis = CreateGenesisBlock(1598918400, 52613770, 0x1e0377ae, 1, 50 * COIN);
+
+
+/*
+
+// MINING GENESIS - SIGNET
+        uint32_t nTime=1713875204;
+        uint32_t nNonce=185020;
+       
+        // @"consensus.hashGenesisBlock: 000000004c2738ff52ee6dc039d4fde2f3292fed9afa9d712f895d7094f8d350\r\n"
+        // @"genesis.hashMerkleRoot: c36c4216baf256beb34d939e7aa158a54b7488be996e8bdab8d83ff9c73f1f4d\r\n"
+        // @"genesis.nNonce: 771851678\r\n"
+        // Difficulty bits:
+        // Using following formula target can be obtained from any block. For example if a target packed in a block appears as 0x1b0404cb its hexadecimal version will look as following:
+        // 0x0404cb * 2**(8*(0x1b - 3)) = 0x00000000000404CB000000000000000000000000000000000000000000000000
+        bool proof_of_work_valid = false;
+        uint256 lowest_hash = uint256S("ffffffffff19d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f");
+        for (nTime=1713875204; ;nTime++)
+        {
+            genesis = CreateGenesisBlock(nTime, nNonce, 0x1e0377ae, 1, 50 * COIN);
+            //genesis = CreateGenesisBlock(nTime, nNonce, 0x1e00ffff, 1, 50 * COIN);
+
+            for (genesis.nNonce = 185020; genesis.nNonce <= 0xfffffff0;genesis.nNonce++)
+            {
+                uint256 genhash = genesis.GetHash();
+                proof_of_work_valid = CheckProofOfWork(genhash, genesis.nBits, consensus);
+                if (proof_of_work_valid) {
+                    break;
+                }
+
+                if (UintToArith256(genhash) < UintToArith256(lowest_hash))
+                    lowest_hash = genhash;
+
+                if (genesis.nNonce % 2000000 == 0)
+                    std::cout << "STILL NOTHING time: " << nTime << " nonce: " << genesis.nNonce << " lowest hash: " << lowest_hash.ToString() << " pow limit: " << consensus.powLimit.ToString() << std::endl;
+
+            }
+            if (proof_of_work_valid) {
+                break;
+            }
+
+            std::cout << "time: " << nTime << std::endl;
+        }
+
+        
         consensus.hashGenesisBlock = genesis.GetHash();
-        assert(consensus.hashGenesisBlock == uint256S("0x00000008819873e925422c1ff0f99f7cc9bbb232af63a077a480a3633bee1ef6"));
-        assert(genesis.hashMerkleRoot == uint256S("0x4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"));
+        // std::cout << "consensus.hashGenesisBlock: " << consensus.hashGenesisBlock.ToString() << std::endl;
+        // std::cout << "genesis.hashMerkleRoot: " << genesis.hashMerkleRoot.ToString() << std::endl;   
+        // std::cout << "genesis.nNonce: " << genesis.nNonce << std::endl;
+        // std::cout << "genesis.nTime: " << nTime << std::endl;
+
+
+        std::cout << std::endl << "SIGNET " << genesis.ToString() << std::endl;
+
+        exit(1);
+
+*/
+
+
+        genesis = CreateGenesisBlock(1713875204, 185020, 0x1e0377ae, 1, 50 * COIN);
+        consensus.hashGenesisBlock = genesis.GetHash();
+        assert(consensus.hashGenesisBlock == uint256S("0x00000083975bda6ff7ee5def1fb5d904526bae8aea1e848fae4e32986f17e3ea"));
+        assert(genesis.hashMerkleRoot == uint256S("0xe8c8cc27e8be80d8d5d0b681881edfce4736a9c036d0f939d6802af3ae8102ac"));
 
         vFixedSeeds.clear();
 
@@ -421,10 +625,33 @@ public:
             consensus.vDeployments[deployment_pos].min_activation_height = version_bits_params.min_activation_height;
         }
 
-        genesis = CreateGenesisBlock(1296688602, 2, 0x207fffff, 1, 50 * COIN);
+
+/*
+        // MINING GENESIS - REGTEST
+        uint32_t nTime = 1713875204;
+        uint32_t nNonce = 1;
+
+        genesis = CreateGenesisBlock(nTime, nNonce, 0x207fffff, 1, 50 * COIN);
+
+        for (genesis.nNonce = 1; genesis.nNonce <= 0xfffffff0;genesis.nNonce++)
+        {
+            if (CheckProofOfWork(genesis.GetHash(), genesis.nBits, consensus)) {
+                break;
+            }
+        }
+
         consensus.hashGenesisBlock = genesis.GetHash();
-        assert(consensus.hashGenesisBlock == uint256S("0x0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206"));
-        assert(genesis.hashMerkleRoot == uint256S("0x4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"));
+        std::cout << std::endl << "REGTEST GENESIS" << genesis.ToString() << std::endl;
+
+        exit(1);
+*/
+
+
+
+        genesis = CreateGenesisBlock(1713875204, 1, 0x207fffff, 1, 50 * COIN);
+        consensus.hashGenesisBlock = genesis.GetHash();
+        assert(consensus.hashGenesisBlock == uint256S("0x11b0cbc77cbd4c6afd8d8006a2981d524024f7aec6c2538b5e35cc5f2df30562"));
+        assert(genesis.hashMerkleRoot == uint256S("0xe8c8cc27e8be80d8d5d0b681881edfce4736a9c036d0f939d6802af3ae8102ac"));
 
         vFixedSeeds.clear(); //!< Regtest mode doesn't have any fixed seeds.
         vSeeds.clear();

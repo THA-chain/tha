@@ -101,6 +101,8 @@ public:
     //! Return whether shutdown was requested.
     virtual bool shutdownRequested() = 0;
 
+    virtual bool wasShutdownRequested() = 0;
+
     //! Return whether a particular setting in <datadir>/settings.json is or
     //! would be ignored because it is also specified in the command line.
     virtual bool isSettingIgnored(const std::string& name) = 0;

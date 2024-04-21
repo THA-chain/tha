@@ -46,20 +46,23 @@ WitnessV0ScriptHash::WitnessV0ScriptHash(const CScript& in)
     CSHA256().Write(in.data(), in.size()).Finalize(begin());
 }
 
-bool ExtractDestination(const CScript& scriptPubKey, CTxDestination& addressRet)
+bool ExtractDestination(const CScript& scriptPubKey, CTxDestination& addressRet, TxoutType *typeRet)
 {
     std::vector<valtype> vSolutions;
     TxoutType whichType = Solver(scriptPubKey, vSolutions);
 
+    if(typeRet){
+        *typeRet = whichType;
+    }
+
     switch (whichType) {
     case TxoutType::PUBKEY: {
         CPubKey pubKey(vSolutions[0]);
-        if (!pubKey.IsValid()) {
-            addressRet = CNoDestination(scriptPubKey);
-        } else {
-            addressRet = PubKeyDestination(pubKey);
-        }
-        return false;
+        if (!pubKey.IsValid())
+            return false;
+
+        addressRet = PKHash(pubKey);
+        return true;
     }
     case TxoutType::PUBKEYHASH: {
         addressRet = PKHash(uint160(vSolutions[0]));
