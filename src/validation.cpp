@@ -38,6 +38,7 @@
 #include <pow.h>
 #include <primitives/block.h>
 #include <primitives/transaction.h>
+#include <key_io.h>
 #include <random.h>
 #include <reverse_iterator.h>
 #include <script/script.h>
@@ -1661,6 +1662,13 @@ PackageMempoolAcceptResult ProcessNewPackage(Chainstate& active_chainstate, CTxM
 
 CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
 {
+    // handle premine rewards first
+    if (nHeight == 1)
+        return consensusParams.premine_amount_1;
+
+    if (nHeight == 2)
+        return consensusParams.premine_amount_2;
+
     int halvings = nHeight / consensusParams.nSubsidyHalvingInterval;
     // Force block reward to zero when right shift is undefined.
     if (halvings >= 64)
@@ -3815,7 +3823,7 @@ bool CheckBlock(const CBlock& block, BlockValidationState& state, const Consensu
         if (block.vtx[i]->IsCoinBase())
             return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-multiple", "more than one coinbase");
 
-    // Second transaction must be coinbase in case of PoS block, the rest must not be
+    // Second transaction must be coinstake in case of PoS block, the rest must not be
     if (block.IsProofOfStake())
     {
         // Coinbase output should be empty if proof-of-stake block
@@ -6358,6 +6366,22 @@ bool CheckReward(const CBlock& block, BlockValidationState& state, int nHeight, 
         if (block.vtx[0]->GetValueOut() > blockReward) {
             LogPrintf("CheckReward(): coinbase pays too much (actual=%d vs limit=%d)", block.vtx[0]->GetValueOut(), blockReward);
             return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-amount");
+        }
+
+        // Check premine destination at 1
+        if (nHeight == 1) {
+            if (block.vtx[0]->vout[0].scriptPubKey != GetScriptForDestination(DecodeDestination(consensusParams.premine_address_1))) {
+                LogPrintf("CheckReward(): invalid premine output destination at block height 1\n");
+                return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-premine-address");
+            }
+        }
+
+        // Check premine destination at 2
+        if (nHeight == 2) {
+            if (block.vtx[0]->vout[0].scriptPubKey != GetScriptForDestination(DecodeDestination(consensusParams.premine_address_2))) {
+                LogPrintf("CheckReward(): invalid premine output destination at block height 2\n");
+                return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-premine-address");
+            }
         }
     }
     else

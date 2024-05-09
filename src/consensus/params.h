@@ -7,6 +7,7 @@
 #define BITCOIN_CONSENSUS_PARAMS_H
 
 #include <uint256.h>
+#include <consensus/amount.h>
 
 #include <chrono>
 #include <limits>
@@ -123,6 +124,10 @@ struct Params {
     /** Proof of stake parameters */
     uint256 posLimit;
     int nLastPOWBlock;
+    std::string premine_address_1;
+    std::string premine_address_2;
+    CAmount premine_amount_1;
+    CAmount premine_amount_2;
     int nEnableHeaderSignatureHeight;
     /** Block sync-checkpoint span*/
     int nCheckpointSpan;

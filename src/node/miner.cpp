@@ -25,6 +25,7 @@
 #include <net.h>
 #include <netbase.h>
 #include <pow.h>
+#include <key_io.h>
 //#include <primitives/transaction.h>
 #include <timedata.h>
 #include <util/time.h>
@@ -167,7 +168,16 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     coinbaseTx.vin.resize(1);
     coinbaseTx.vin[0].prevout.SetNull();
     coinbaseTx.vout.resize(1);
-    coinbaseTx.vout[0].scriptPubKey = scriptPubKeyIn;
+
+    // force coinbase destination to premine at block heights 1 and 2
+    if (nHeight == 1) {
+        coinbaseTx.vout[0].scriptPubKey = GetScriptForDestination(DecodeDestination(chainparams.GetConsensus().premine_address_1));
+    } else if (nHeight == 2) {
+        coinbaseTx.vout[0].scriptPubKey = GetScriptForDestination(DecodeDestination(chainparams.GetConsensus().premine_address_2));
+    } else {
+        coinbaseTx.vout[0].scriptPubKey = scriptPubKeyIn;
+    }
+
     coinbaseTx.vout[0].nValue = nFees + GetBlockSubsidy(nHeight, chainparams.GetConsensus());
     coinbaseTx.vin[0].scriptSig = CScript() << nHeight << OP_0;
     pblock->vtx[0] = MakeTransactionRef(std::move(coinbaseTx));
