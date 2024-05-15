@@ -118,6 +118,11 @@ bool CheckProofOfStake(CBlockIndex* pindexPrev, BlockValidationState& state, con
         return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "bad-stake-prevout-couldnotload", 
                             strprintf("CheckProofOfStake() : Block at height %i for prevout can not be loaded", coinPrev.nHeight));
 
+    // Check the staker min utxo value
+    if(coinPrev.out.nValue < DEFAULT_STAKING_MIN_UTXO_VALUE)
+        return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "stake-less-than-min-utxo",
+                            strprintf("CheckProofOfStake() : Stake for block at height %i does not have the minimum amount required for staking", pindexPrev->nHeight + 1));
+
     // Verify signature
     if (!VerifySignature(coinPrev, txin.prevout.hash, tx, 0, SCRIPT_VERIFY_NONE))
         return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "bad-stake-signature-verify", 

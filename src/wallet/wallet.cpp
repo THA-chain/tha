@@ -4397,10 +4397,10 @@ void CWallet::AvailableCoinsForStaking(std::vector<wallet::COutput>& vCoins) con
                 isminetype mine = IsMine(pcoin->tx->vout[i]);
 
                 int nDepth = GetTxDepthInMainChain(*pcoin);
-                if (nDepth < 6)
+                if (nDepth < COINBASE_MATURITY)
                     continue;
 
-                if ((mine != ISMINE_NO) && !IsLockedCoin(COutPoint{(*it).first, i}) && (pcoin->tx->vout[i].nValue > 0))
+                if ((mine != ISMINE_NO) && !IsLockedCoin(COutPoint{(*it).first, i}) && (pcoin->tx->vout[i].nValue > 0) && pcoin->tx->vout[i].nValue >= DEFAULT_STAKING_MIN_UTXO_VALUE)
                 {
                     std::vector<valtype> solutions;
                     auto whichtype = Solver(pcoin->tx->vout[i].scriptPubKey, solutions);
