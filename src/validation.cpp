@@ -6374,6 +6374,11 @@ bool CheckReward(const CBlock& block, BlockValidationState& state, int nHeight, 
                 LogPrintf("CheckReward(): invalid premine output destination at block height 1\n");
                 return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-premine-address");
             }
+            // Insist on full premine amount reward
+            if (block.vtx[0]->GetValueOut() != blockReward) {
+                LogPrintf("CheckReward(): premine at height 1 doesn't match coinbase reward (actual=%d vs limit=%d)", block.vtx[0]->GetValueOut(), blockReward);
+                return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-amount");
+            }
         }
 
         // Check premine destination at 2
@@ -6381,6 +6386,11 @@ bool CheckReward(const CBlock& block, BlockValidationState& state, int nHeight, 
             if (block.vtx[0]->vout[0].scriptPubKey != GetScriptForDestination(DecodeDestination(consensusParams.premine_address_2))) {
                 LogPrintf("CheckReward(): invalid premine output destination at block height 2\n");
                 return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-premine-address");
+            }
+            // Insist on full premine amount reward
+            if (block.vtx[0]->GetValueOut() != blockReward) {
+                LogPrintf("CheckReward(): premine at height 2 doesn't match coinbase reward (actual=%d vs limit=%d)", block.vtx[0]->GetValueOut(), blockReward);
+                return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-amount");
             }
         }
     }
