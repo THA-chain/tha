@@ -221,7 +221,7 @@ public:
         consensus.premine_address_1 = "13FoL25J8fvTzYRa3x2v3sk8SV4W1o21ty";
         consensus.premine_amount_1 = 84000 * COIN;
         consensus.premine_address_2 = "1MkwuMMbEqVxdPf4aq4qLxcsasAZiLKMVT";
-        consensus.premine_amount_2 = 126000 * COIN;
+        consensus.premine_amount_2 = 171000 * COIN;
 
         // fixed seeds disabled; to re-enable, populate chainparams_seed_main array in chainparamsseeds.h, uncomment line bellow and rebuild
         // vFixedSeeds = std::vector<uint8_t>(std::begin(chainparams_seed_main), std::end(chainparams_seed_main));
@@ -371,7 +371,7 @@ public:
         consensus.premine_address_1 = "mzyewKRoWUwNCEo1QktB8MoKAzY2LUQH1w";
         consensus.premine_amount_1 = 84000 * COIN;
         consensus.premine_address_2 = "n3VHMJ6zHFGRduFToRE9FTa5t5xB1RB6Gv";
-        consensus.premine_amount_2 = 126000 * COIN;
+        consensus.premine_amount_2 = 171000 * COIN;
 
         // fixed seeds disabled; to re-enable, populate chainparams_seed_test array in chainparamsseeds.h, uncomment line bellow and rebuild
         // vFixedSeeds = std::vector<uint8_t>(std::begin(chainparams_seed_test), std::end(chainparams_seed_test));
@@ -557,7 +557,7 @@ public:
         consensus.premine_address_1 = "mzyewKRoWUwNCEo1QktB8MoKAzY2LUQH1w";
         consensus.premine_amount_1 = 84000 * COIN;
         consensus.premine_address_2 = "n3VHMJ6zHFGRduFToRE9FTa5t5xB1RB6Gv";
-        consensus.premine_amount_2 = 126000 * COIN;
+        consensus.premine_amount_2 = 171000 * COIN;
 
         fDefaultConsistencyChecks = false;
         m_is_mockable_chain = false;
@@ -700,7 +700,7 @@ public:
         consensus.premine_address_1 = "mzyewKRoWUwNCEo1QktB8MoKAzY2LUQH1w";
         consensus.premine_amount_1 = 84000 * COIN;
         consensus.premine_address_2 = "n3VHMJ6zHFGRduFToRE9FTa5t5xB1RB6Gv";
-        consensus.premine_amount_2 = 126000 * COIN;
+        consensus.premine_amount_2 = 171000 * COIN;
 
     }
 };
