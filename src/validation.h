@@ -88,7 +88,7 @@ static constexpr int DEFAULT_CHECKLEVEL{3};
 static const uint64_t MIN_DISK_SPACE_FOR_BLOCK_FILES = 550 * 1024 * 1024;
 
 // Minimum amount for UTXO to be considered a valid stake
-static const CAmount DEFAULT_STAKING_MIN_UTXO_VALUE = 1 * COIN;
+static const CAmount DEFAULT_STAKING_MIN_UTXO_VALUE = 0.1 * COIN;
 
 /** Current sync state passed to tip changed callbacks. */
 enum class SynchronizationState {
