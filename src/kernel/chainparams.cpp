@@ -117,7 +117,7 @@ public:
         consensus.nRuleChangeActivationThreshold = 1815; // 90% of 2016
         consensus.nMinerConfirmationWindow = 2016; // nPowTargetTimespan / nPowTargetSpacing
 
-        consensus.nLastPOWBlock = 10;
+        consensus.nLastPOWBlock = 36;
         consensus.nEnableHeaderSignatureHeight = 0;
         consensus.nCheckpointSpan = COINBASE_MATURITY;
 
@@ -271,6 +271,11 @@ public:
         consensus.fPowNoRetargeting = false;
         consensus.nRuleChangeActivationThreshold = 1512; // 75% for testchains
         consensus.nMinerConfirmationWindow = 2016; // nPowTargetTimespan / nPowTargetSpacing
+
+        consensus.nLastPOWBlock = 36;
+        consensus.nEnableHeaderSignatureHeight = 0;
+        consensus.nCheckpointSpan = COINBASE_MATURITY;
+
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].bit = 28;
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nStartTime = Consensus::BIP9Deployment::NEVER_ACTIVE;
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
@@ -457,6 +462,11 @@ public:
         consensus.fPowNoRetargeting = false;
         consensus.nRuleChangeActivationThreshold = 1815; // 90% of 2016
         consensus.nMinerConfirmationWindow = 2016; // nPowTargetTimespan / nPowTargetSpacing
+
+        consensus.nLastPOWBlock = 36;
+        consensus.nEnableHeaderSignatureHeight = 0;
+        consensus.nCheckpointSpan = COINBASE_MATURITY;
+
         consensus.MinBIP9WarningHeight = 0;
         consensus.powLimit = uint256S("00000377ae000000000000000000000000000000000000000000000000000000");
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].bit = 28;
@@ -591,6 +601,10 @@ public:
         consensus.fPowNoRetargeting = true;
         consensus.nRuleChangeActivationThreshold = 108; // 75% for testchains
         consensus.nMinerConfirmationWindow = 144; // Faster than normal for regtest (144 instead of 2016)
+
+        consensus.nLastPOWBlock = 36;
+        consensus.nEnableHeaderSignatureHeight = 0;
+        consensus.nCheckpointSpan = COINBASE_MATURITY;
 
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].bit = 28;
         consensus.vDeployments[Consensus::DEPLOYMENT_TESTDUMMY].nStartTime = 0;
