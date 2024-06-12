@@ -217,7 +217,9 @@ QT_RES_ICONS = \
   qt/res/icons/tx_input.png \
   qt/res/icons/tx_output.png \
   qt/res/icons/tx_mined.png \
-  qt/res/icons/warning.png
+  qt/res/icons/warning.png \
+  qt/res/icons/mining_on.png \
+  qt/res/icons/mining_off.png  
 
 BITCOIN_QT_BASE_CPP = \
   qt/bantablemodel.cpp \

@@ -131,6 +131,7 @@ private:
     QLabel* progressBarLabel = nullptr;
     GUIUtil::ClickableProgressBar* progressBar = nullptr;
     QProgressDialog* progressDialog = nullptr;
+    GUIUtil::ClickableLabel* labelMiningIcon = nullptr;
 
     QMenuBar* appMenuBar = nullptr;
     QToolBar* appToolBar = nullptr;
@@ -177,6 +178,7 @@ private:
     ModalOverlay* modalOverlay = nullptr;
 
     QMenu* m_network_context_menu = new QMenu(this);
+    QMenu* m_mining_context_menu = new QMenu(this);
 
 #ifdef Q_OS_MACOS
     CAppNapInhibitor* m_app_nap_inhibitor = nullptr;
@@ -228,6 +230,8 @@ public Q_SLOTS:
     void setNumConnections(int count);
     /** Set network state shown in the UI */
     void setNetworkActive(bool network_active);
+    /** Set Mining state shown in the UI */
+    void setMiningActive();
     /** Set number of blocks and last block date shown in the UI */
     void setNumBlocks(int count, const QDateTime& blockDate, double nVerificationProgress, SyncType synctype, SynchronizationState sync_state);
     /** Launch the wallet creation modal (no-op if wallet is not compiled) **/
@@ -308,6 +312,12 @@ public Q_SLOTS:
     void showDebugWindowActivateConsole();
     /** Show help message dialog */
     void showHelpMessageClicked();
+
+
+#ifdef ENABLE_WALLET
+    /** Update Mining icon **/
+    void updateMiningIcon();
+#endif // ENABLE_WALLET
 
     /** Show window if hidden, unminimize when minimized, rise when obscured or show if hidden and fToggleHidden is true */
     void showNormalIfMinimized() { showNormalIfMinimized(false); }

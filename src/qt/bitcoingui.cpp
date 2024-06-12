@@ -25,6 +25,7 @@
 #include <qt/walletmodel.h>
 #include <qt/walletview.h>
 #endif // ENABLE_WALLET
+#include <wallet/wallet.h>
 
 #ifdef Q_OS_MACOS
 #include <qt/macdockiconhandler.h>
@@ -40,6 +41,7 @@
 #include <validation.h>
 
 #include <functional>
+#include <sstream>
 
 #include <QAction>
 #include <QActionGroup>
@@ -165,6 +167,7 @@ BitcoinGUI::BitcoinGUI(interfaces::Node& node, const PlatformStyle *_platformSty
     labelProxyIcon = new GUIUtil::ClickableLabel(platformStyle);
     connectionsControl = new GUIUtil::ClickableLabel(platformStyle);
     labelBlocksIcon = new GUIUtil::ClickableLabel(platformStyle);
+    labelMiningIcon = new GUIUtil::ClickableLabel(platformStyle);
     if(enableWallet)
     {
         frameBlocksLayout->addStretch();
@@ -177,10 +180,23 @@ BitcoinGUI::BitcoinGUI(interfaces::Node& node, const PlatformStyle *_platformSty
     }
     frameBlocksLayout->addWidget(labelProxyIcon);
     frameBlocksLayout->addStretch();
+    frameBlocksLayout->addWidget(labelMiningIcon);
+    frameBlocksLayout->addStretch();    
     frameBlocksLayout->addWidget(connectionsControl);
     frameBlocksLayout->addStretch();
     frameBlocksLayout->addWidget(labelBlocksIcon);
     frameBlocksLayout->addStretch();
+
+#ifdef ENABLE_WALLET
+
+    {
+        QTimer *timerMiningIcon = new QTimer(this);
+        connect(timerMiningIcon, SIGNAL(timeout()), this, SLOT(updateMiningIcon()));
+        timerMiningIcon->start(2000);
+
+        updateMiningIcon();
+    }
+#endif // ENABLE_WALLET
 
     // Progress bar and label for blocks download
     progressBarLabel = new QLabel();
@@ -615,6 +631,11 @@ void BitcoinGUI::setClientModel(ClientModel *_clientModel, interfaces::BlockAndH
         connect(_clientModel, &ClientModel::numConnectionsChanged, this, &BitcoinGUI::setNumConnections);
         connect(_clientModel, &ClientModel::networkActiveChanged, this, &BitcoinGUI::setNetworkActive);
 
+        setMiningActive();
+        connect(labelMiningIcon, &GUIUtil::ClickableLabel::clicked, [this] {
+            GUIUtil::PopupMenu(m_mining_context_menu, QCursor::pos());
+        });     
+
         modalOverlay->setKnownBestHeight(tip_info->header_height, QDateTime::fromSecsSinceEpoch(tip_info->header_time), /*presync=*/false);
         setNumBlocks(tip_info->block_height, QDateTime::fromSecsSinceEpoch(tip_info->block_time), tip_info->verification_progress, SyncType::BLOCK_SYNC, SynchronizationState::INIT_DOWNLOAD);
         connect(_clientModel, &ClientModel::numBlocksChanged, this, &BitcoinGUI::setNumBlocks);
@@ -1037,6 +1058,32 @@ void BitcoinGUI::setNetworkActive(bool network_active)
             //: A context menu item. The network activity was disabled previously.
             tr("Enable network activity"),
         [this, new_state = !network_active] { m_node.setNetworkActive(new_state); });
+}
+
+void BitcoinGUI::setMiningActive()
+{
+    updateNetworkState();
+    m_mining_context_menu->clear();
+
+    m_mining_context_menu->addAction(
+        // : A context menu item.
+        tr("ENABLE Mining"),
+        [this] {
+            rpcConsole->setTabFocus(RPCConsole::TabTypes::CONSOLE);
+            wallet::ResumeMining();
+            std::cout << "MINING RESUMED" << std::endl;
+        });
+
+    m_mining_context_menu->actions().at(0)->setText("Omogući kopanje");
+
+    m_mining_context_menu->addAction(
+        //: A context menu item.
+        tr("Stop Mining"),
+        [this] {
+            rpcConsole->setTabFocus(RPCConsole::TabTypes::CONSOLE);
+            wallet::PauseMining();
+            std::cout << "MINING PAUSED" << std::endl;
+        });
 }
 
 void BitcoinGUI::updateHeadersSyncProgressLabel()
@@ -1477,6 +1524,51 @@ void BitcoinGUI::updateWindowTitle()
     }
     setWindowTitle(window_title);
 }
+
+#ifdef ENABLE_WALLET
+void BitcoinGUI::updateMiningIcon()
+{
+    if (m_node.wasShutdownRequested())
+    {
+        // wallet will be deleted soon, exit.
+        return;
+    }
+
+    WalletView * const walletView = walletFrame ? walletFrame->currentWalletView() : 0;
+    if (!walletView) {
+        // Not staking because wallet is closed
+        labelMiningIcon->setPixmap(platformStyle->SingleColorIcon(":/icons/mining_off").pixmap(STATUSBAR_ICONSIZE, STATUSBAR_ICONSIZE));
+        labelMiningIcon->setToolTip(tr("Not mining"));
+        return;
+    }
+    WalletModel * const walletModel = walletView->getWalletModel();
+
+    if (walletModel->wallet().wallet()->getLastCoinStakeSearchInterval() &&
+            walletModel->wallet().wallet()->getEnabledStaking())
+    {
+        labelMiningIcon->setPixmap(platformStyle->SingleColorIcon(":/icons/mining_on").pixmap(STATUSBAR_ICONSIZE, STATUSBAR_ICONSIZE));
+        std::stringstream ss;
+        ss << "CPU mining: " << (int)wallet::getHashesPerSecond() << " Hashes/second \n" << "CPU loading: " << (int)wallet::getCpuLoading() << "%";
+        labelMiningIcon->setToolTip(tr(ss.str().c_str()));
+    }
+    else
+    {
+        labelMiningIcon->setPixmap(platformStyle->SingleColorIcon(":/icons/mining_off").pixmap(STATUSBAR_ICONSIZE, STATUSBAR_ICONSIZE));
+
+        //if (m_node.getNodeCount(ConnectionDirection::Both) < 3)
+        if (m_node.getNodeCount(ConnectionDirection::Both) < 0)
+            labelMiningIcon->setToolTip(tr("Not mining because wallet is offline"));
+        else if (m_node.isInitialBlockDownload())
+            labelMiningIcon->setToolTip(tr("Not mining because wallet is syncing"));
+        // else if (!nWeight)
+        //     labelMiningIcon->setToolTip(tr("Not mining because you don't have mature transactions"));
+        else if (walletModel->wallet().isLocked())
+            labelMiningIcon->setToolTip(tr("Not mining because wallet is locked"));
+        else
+            labelMiningIcon->setToolTip(tr("Not mining"));
+    }
+}
+#endif // ENABLE_WALLET
 
 void BitcoinGUI::showNormalIfMinimized(bool fToggleHidden)
 {

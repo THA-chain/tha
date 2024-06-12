@@ -43,7 +43,7 @@ QList<TransactionRecord> TransactionRecord::decomposeTransaction(const interface
     bool involvesWatchAddress = false;
     isminetype fAllFromMe = ISMINE_SPENDABLE;
     bool any_from_me = false;
-    if (wtx.is_coinbase) {
+    if (wtx.is_coinbase || wtx.is_coinstake) {
         fAllFromMe = ISMINE_NO;
     } else {
         for (const isminetype mine : wtx.txin_is_mine)
@@ -114,8 +114,16 @@ QList<TransactionRecord> TransactionRecord::decomposeTransaction(const interface
                 //
 
                 TransactionRecord sub(hash, nTime);
-                sub.idx = i; // vout index
-                sub.credit = txout.nValue;
+                if(wtx.is_coinstake) // Combine into single output for coinstake
+                {
+                    sub.idx = 1; // vout index
+                    sub.credit = nNet;
+                }
+                else
+                {
+                    sub.idx = i; // vout index
+                    sub.credit = txout.nValue;
+                }
                 sub.involvesWatchAddress = mine & ISMINE_WATCH_ONLY;
                 if (wtx.txout_address_is_mine[i])
                 {
@@ -129,13 +137,16 @@ QList<TransactionRecord> TransactionRecord::decomposeTransaction(const interface
                     sub.type = TransactionRecord::RecvFromOther;
                     sub.address = mapValue["from"];
                 }
-                if (wtx.is_coinbase)
+                if (wtx.is_coinbase || wtx.is_coinstake)
                 {
                     // Generated
                     sub.type = TransactionRecord::Generated;
                 }
 
                 parts.append(sub);
+
+                if(wtx.is_coinstake)
+                    break; // Single output for coinstake                
             }
         }
     } else {
@@ -165,7 +176,7 @@ void TransactionRecord::updateStatus(const interfaces::WalletTxStatus& wtx, cons
     }
     status.sortKey = strprintf("%010d-%01d-%010u-%03d-%d",
         wtx.block_height,
-        wtx.is_coinbase ? 1 : 0,
+        (wtx.is_coinbase || wtx.is_coinstake) ? 1 : 0,
         wtx.time_received,
         idx,
         typesort);
