@@ -61,7 +61,6 @@ namespace BCLog {
         VALIDATION  = (1 << 21),
         I2P         = (1 << 22),
         IPC         = (1 << 23),
-        COINSTAKE   = (1 << 24),
 #ifdef DEBUG_LOCKCONTENTION
         LOCK        = (1 << 24),
 #endif
@@ -70,6 +69,7 @@ namespace BCLog {
         TXRECONCILIATION = (1 << 27),
         SCAN        = (1 << 28),
         TXPACKAGES  = (1 << 29),
+        COINSTAKE   = (1 << 30),
         ALL         = ~(uint32_t)0,
     };
     enum class Level {
