@@ -2209,7 +2209,7 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
             }
         }
         if (block.IsProofOfStake()) {
-            if (!CheckHeaderPoS(block, pindex, view)) {
+            if (!CheckHeaderPoS(block, params.GetConsensus(), pindex, view)) {
                 return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "CheckHeaderPoS-failure-ConnectBlock");
             }
         }
@@ -6413,11 +6413,12 @@ bool CheckHeaderPoW(const CBlockHeader& block, const Consensus::Params& consensu
     return CheckProofOfWork(block.GetHash(), block.nBits, consensusParams);
 }
 
-bool CheckHeaderPoS(const CBlockHeader& block, CBlockIndex* pindex, CCoinsViewCache& view)
+bool CheckHeaderPoS(const CBlockHeader& block, const Consensus::Params& consensusParams, CBlockIndex* pindex, CCoinsViewCache& view)
 {
-    if (pindex->pprev->nHeight > 10 && !CheckRecoveredPubKeyFromBlockSignature(pindex->pprev, block, view)) {
+    if (pindex->pprev->nHeight > consensusParams.nLastPOWBlock && !CheckRecoveredPubKeyFromBlockSignature(pindex->pprev, block, view)) {
         return error("Failed signature check");
     }
+
     return CheckKernel(pindex->pprev, block.nBits, block.StakeTime(), block.nNonce, block.prevoutStake, view);
 }
 

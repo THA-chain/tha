@@ -1333,7 +1333,7 @@ bool GetBlockPublicKey(const CBlock& block, std::vector<unsigned char>& vchPubKe
 bool GetSpentCoinFromBlock(const CBlockIndex* pindex, COutPoint prevout, Coin* coin);
 bool GetSpentCoinFromMainChain(const CBlockIndex* pforkPrev, COutPoint prevoutStake, Coin* coin);
 bool CheckHeaderPoW(const CBlockHeader& block, const Consensus::Params& consensusParams);
-bool CheckHeaderPoS(const CBlockHeader& block, CBlockIndex* pindex, CCoinsViewCache& view);
+bool CheckHeaderPoS(const CBlockHeader& block, const Consensus::Params& consensusParams, CBlockIndex* pindex, CCoinsViewCache& view);
 bool CheckHeaderProof(const CBlockHeader& block, const Consensus::Params& consensusParams);
 bool CheckIndexProof(const CBlockIndex& block, const Consensus::Params& consensusParams);
 
