@@ -118,6 +118,87 @@ static RPCHelpMan getnetworkhashps()
     };
 }
 
+static RPCHelpMan getgenerate()
+{
+    return RPCHelpMan{"getgenerate",
+                "\nReturn if the server is set to generate coins or not. The default is false.\n"
+                "It is set with the command line argument -gen (or " + std::string(BITCOIN_CONF_FILENAME) + " setting gen)\n"
+                "It can also be set with the setgenerate call.\n",
+                {},
+                RPCResult{
+                    RPCResult::Type::BOOL, "", "If the server is set to generate coins or not"},
+                RPCExamples{
+                    HelpExampleCli("getgenerate", "")
+                    + HelpExampleRpc("getgenerate", "")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    LOCK(cs_main);
+    return gArgs.GetBoolArg("-gen", node::DEFAULT_GENERATE);
+},
+    };
+}
+
+static RPCHelpMan setgenerate()
+{
+    return RPCHelpMan{"setgenerate",
+                "\nSet 'generate' true or false to turn generation on or off.\n"
+                "Generation is limited to 'genproclimit' processors, -1 is unlimited.\n"
+                "See the getgenerate call for the current setting.\n",
+                {
+                    {"generate", RPCArg::Type::BOOL, RPCArg::Optional::NO, "Set to true to turn on generation, off to turn off."},
+                    {"nproclimit", RPCArg::Type::NUM, RPCArg::Default{node::DEFAULT_GENERATE_THREADS}, "Set the processor limit for when generation is on. Can be -1 for unlimited."},
+                },
+                RPCResult{
+                    RPCResult::Type::NONE, "", "No result"
+                },
+                RPCExamples{
+                    "\nSet the generation on with a limit of one processor\n"
+                    + HelpExampleCli("setgenerate", "true 1") +
+                    "\nCheck the setting\n"
+                    + HelpExampleCli("getgenerate", "") +
+                    "\nTurn off generation\n"
+                    + HelpExampleCli("setgenerate", "false") +
+                    "\nUsing json rpc\n"
+                    + HelpExampleRpc("setgenerate", "true, 1")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    static NodeContext& node = EnsureAnyNodeContext(request.context);
+    static const CTxMemPool& mempool = EnsureMemPool(node);
+    static ChainstateManager& chainman = EnsureChainman(node);
+    static CConnman& connman = EnsureConnman(node);
+
+    std::string miner_address = gArgs.GetArg("-mineraddress").value_or("");
+
+    CTxDestination destination = DecodeDestination(miner_address);
+    if (!IsValidDestination(destination)) {
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Error: Invalid address!!! Note: set mineraddress in conf file");
+    }
+
+    CScript coinbase_script = GetScriptForDestination(destination);
+
+    if (Params().MineBlocksOnDemand())
+        throw JSONRPCError(RPC_METHOD_NOT_FOUND, "Use the generatetoaddress method instead of setgenerate on this network");
+
+    bool fGenerate = self.Arg<bool>(0);
+    int nGenProcLimit = (int)gArgs.GetIntArg("-genproclimit", node::DEFAULT_GENERATE_THREADS);
+
+    if (!request.params[1].isNull()) {
+        nGenProcLimit = self.Arg<int>(1);
+    }
+
+    if (nGenProcLimit == 0)
+        fGenerate = false;
+
+    gArgs.ForceSetArg("-gen", (fGenerate ? std::string("1") : std::string("0")));
+    gArgs.ForceSetArg("-genproclimit", std::to_string(nGenProcLimit));
+    node::GeneratePowBlocks(connman, chainman, mempool, fGenerate, nGenProcLimit);
+    return NullUniValue;
+},
+    };
+}
+
 static bool GenerateBlock(ChainstateManager& chainman, CBlock& block, uint64_t& max_tries, std::shared_ptr<const CBlock>& block_out, bool process_new_block)
 {
     block_out.reset();
@@ -1161,6 +1242,8 @@ void RegisterMiningRPCCommands(CRPCTable& t)
 {
     static const CRPCCommand commands[]{
         {"mining", &getnetworkhashps},
+        {"mining", &getgenerate},
+        {"mining", &setgenerate},
         {"mining", &getmininginfo},
         {"mining", &prioritisetransaction},
         {"mining", &getprioritisedtransactions},

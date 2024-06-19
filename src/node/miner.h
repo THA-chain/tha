@@ -36,6 +36,8 @@ class CConnman;
 namespace Consensus { struct Params; };
 
 namespace node {
+static const bool DEFAULT_GENERATE = false;
+static const int DEFAULT_GENERATE_THREADS = 1;
 static const bool DEFAULT_PRINTPRIORITY = false;
 
 struct CBlockTemplate
@@ -214,6 +216,9 @@ void RegenerateCommitments(CBlock& block, ChainstateManager& chainman);
 void ApplyArgsManOptions(const ArgsManager& gArgs, BlockAssembler::Options& options);
 
 void ThreadStakeMiner(wallet::CWallet& wallet, CConnman& connman, ChainstateManager& chainman, const CTxMemPool& mempool);
+
+/** Run the PoW miner */
+void GeneratePowBlocks(CConnman& connman, ChainstateManager& chainman, const CTxMemPool& mempool, bool fGenerate, int nThreads);
 
 } // namespace node
 

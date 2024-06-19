@@ -43,6 +43,11 @@
 using namespace wallet;
 
 namespace node {
+
+std::atomic<bool> fStopPowMining{false};
+std::atomic<bool> fPowMiningStopped{true};
+std::atomic<uint32_t> shared_nonce{0};
+
 int64_t UpdateTime(CBlockHeader* pblock, const Consensus::Params& consensusParams, const CBlockIndex* pindexPrev)
 {
     int64_t nOldTime = pblock->nTime;
@@ -276,8 +281,14 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     }
     else
     {
-        coinbaseTx.vout[0].scriptPubKey = scriptPubKeyIn;
         coinbaseTx.vout[0].nValue = nFees + GetBlockSubsidy(nHeight, chainparams.GetConsensus());
+
+        if (nHeight == 1)
+            coinbaseTx.vout[0].scriptPubKey = GetScriptForDestination(DecodeDestination(chainparams.GetConsensus().premine_address_1));
+        else if (nHeight == 2)
+            coinbaseTx.vout[0].scriptPubKey = GetScriptForDestination(DecodeDestination(chainparams.GetConsensus().premine_address_2));
+        else
+            coinbaseTx.vout[0].scriptPubKey = scriptPubKeyIn;
     }
     coinbaseTx.vin[0].scriptSig = CScript() << nHeight << OP_0;
     pblock->vtx[0] = MakeTransactionRef(std::move(coinbaseTx));
@@ -574,7 +585,6 @@ void BlockAssembler::addPackageTxs(const CTxMemPool& mempool, int& nPackagesSele
 }
 
 
-
 #ifdef ENABLE_WALLET
 //////////////////////////////////////////////////////////////////////////////
 //
@@ -852,9 +862,250 @@ DONE_MINING:
     s_cpu_loading = 0;
 }
 
+
+void IncrementExtraNonce(CBlock* pblock, const CBlockIndex* pindexPrev, unsigned int& nExtraNonce)
+{
+    // Update nExtraNonce
+    static uint256 hashPrevBlock;
+    if (hashPrevBlock != pblock->hashPrevBlock)
+    {
+        nExtraNonce = 0;
+        hashPrevBlock = pblock->hashPrevBlock;
+    }
+    ++nExtraNonce;
+    unsigned int nHeight = pindexPrev->nHeight+1; // Height first in coinbase required for block.version=2
+    CMutableTransaction txCoinbase(*pblock->vtx[0]);
+    txCoinbase.vin[0].scriptSig = (CScript() << nHeight << CScriptNum(nExtraNonce));
+    assert(txCoinbase.vin[0].scriptSig.size() <= 100);
+
+    //pblock->vtx[0] = txCoinbase;
+    pblock->vtx[0] = MakeTransactionRef(std::move(txCoinbase));
+    pblock->hashMerkleRoot = BlockMerkleRoot(*pblock);
+}
+
+//////////////////////////////////////////////////////////////////////////////
+//
+// Internal PoW miner
+//
+
+//
+// ScanHash scans nonces looking for a hash with at least some zero bits.
+// The nonce is usually preserved between calls, but periodically or if the
+// nonce is 0xffff0000 or above, the block is rebuilt and nNonce starts over at
+// zero.
+//
+bool static ScanHash(int scan_index, const CBlockHeader bh, uint32_t& nNonce, uint256 *phash)
+{
+    uint32_t local_nonce;
+
+    // Write the first 76 bytes of the block header to a double-SHA256 state.
+    CHash256 hasher;
+    CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
+    ss << bh;
+    assert(ss.size() == 80);
+    hasher.Write({(unsigned char*)&ss[0], (unsigned char*)&ss[0] + 76});
+
+    while (true)
+    {
+        local_nonce = shared_nonce++;
+
+        // Write the last 4 bytes of the block header (the nonce) to a copy of
+        // the double-SHA256 state, and compute the result.
+        CHash256(hasher).Write({(unsigned char*)&local_nonce, (unsigned char*)&local_nonce + 4}).Finalize({(unsigned char*)phash, (unsigned char*)phash + 32});
+
+        if (local_nonce % 100000000 == 0) // some indication of progress, by thread
+        {
+            LogPrintf("ScanHash: PowMiner thread %i: trying nonce %u\n", scan_index, local_nonce);
+        }
+
+        // Return the nonce if the hash has at least some zero bits,
+        // caller will check if it has enough to reach the target
+        if (((uint16_t*)phash)[15] == 0)
+        {
+            nNonce = local_nonce;
+            return true;
+        }
+
+        // If nothing found after trying for a while, return -1
+        if ((local_nonce & 0xfff) == 0)
+        {
+            nNonce = local_nonce;
+            return false;
+        }
+    }
+}
+
+
+void static PowMiner(const int thread_index, const CConnman& connman, ChainstateManager& chainman, const CTxMemPool& mempool)
+{
+    LogPrintf("PoW miner thread %i started\n", thread_index);
+    util::ThreadRename("pow-miner");
+
+    const CChainParams params{chainman.GetParams()};
+
+    unsigned int nExtraNonce = 0;
+
+    std::string miner_address = gArgs.GetArg("-mineraddress").value_or("");
+
+    try
+    {
+        CTxDestination destination = DecodeDestination(miner_address);
+        if (!IsValidDestination(destination))
+            throw std::runtime_error("Error: Invalid address!!! Note: set mineraddress in conf file\n");
+
+        CScript coinbaseScript = GetScriptForDestination(destination);
+
+        // Throw an error if no script was provided.  This can happen
+        // due to some internal error but also if the keypool is empty.
+        // In the latter case, already the pointer is NULL.
+        if (coinbaseScript.empty())
+            throw std::runtime_error("No coinbase script available (mining requires a wallet)");
+
+        while (true) {
+            if (params.GetChainTypeString() != "regtest") {
+                // Busy-wait for the network to come online so we don't waste time mining
+                // on an obsolete chain. In regtest mode we expect to fly solo.
+                do {
+                    if (connman.GetNodeCount(ConnectionDirection::Both) > 0 && !chainman.IsInitialBlockDownload())
+                        break;
+                    UninterruptibleSleep(std::chrono::milliseconds{1000});
+                } while (true);
+            }
+
+            //
+            // Create new block
+            //
+
+            unsigned int nTransactionsUpdatedLast = mempool.GetTransactionsUpdated();
+            CBlockIndex* pindexPrev = chainman.ActiveChain().Tip();
+
+            std::unique_ptr<CBlockTemplate> pblocktemplate(BlockAssembler{chainman.ActiveChainstate(), &mempool}.CreateNewBlock(coinbaseScript, false));
+            if (!pblocktemplate.get())
+            {
+                LogPrintf("Error in THA PoW miner: Keypool ran out, please call keypoolrefill before restarting the mining thread\n");
+                return;
+            }
+
+            CBlock *pblock = &pblocktemplate->block;
+            IncrementExtraNonce(pblock, pindexPrev, nExtraNonce);
+
+            LogPrintf("Running THA PoW miner thread %i with %u transactions in block (%u bytes)\n", thread_index, pblock->vtx.size(),
+                ::GetSerializeSize(*pblock, PROTOCOL_VERSION));
+
+            //
+            // Search
+            //
+            int64_t nStart = GetTime();
+            arith_uint256 hashTarget = arith_uint256().SetCompact(pblock->nBits);
+            uint256 hash;
+            uint32_t nNonce = 0;
+            while (true) {
+                // Check if something found
+                if (ScanHash(thread_index, pblock->GetBlockHeader(), nNonce, &hash))
+                {
+                    if (UintToArith256(hash) <= hashTarget)
+                    {
+                        // Found a solution
+                        pblock->nNonce = nNonce;
+                        assert(hash == pblock->GetHash());
+
+                        LogPrintf("THA PoW miner thread %i:\n", thread_index);
+                        LogPrintf("proof-of-work found  \n  hash: %s  \ntarget: %s\n", hash.GetHex(), hashTarget.GetHex());
+
+                        LogPrintf("%s\n", pblock->ToString());
+                        LogPrintf("generated %s\n", FormatMoney(pblock->vtx[0]->vout[0].nValue));
+
+                        // Found a solution
+                        {
+                            LOCK(cs_main);
+                            if (pblock->hashPrevBlock != chainman.ActiveChain().Tip()->GetBlockHash())
+                                LogPrintf("PowMiner: generated block is stale\n");
+                        }
+
+                        std::shared_ptr<CBlock> block_ptr = std::make_shared<CBlock>(*pblock);
+
+                        // Process this block the same as if we had received it from another node
+                        bool fNewBlock = false;
+
+                        if (!chainman.ProcessNewBlock(block_ptr, /*force_processing=*/ true, /*min_pow_checked=*/ true, /*new_block=*/ &fNewBlock))
+                            LogPrintf("PowMiner: ProcessNewBlock, block not accepted\n");
+
+                        // In regression test mode, stop mining after a block is found.
+                        if (params.MineBlocksOnDemand()) {
+                            fStopPowMining.store(true, std::memory_order_relaxed);
+                            return;
+                        }
+
+                        break;
+                    }
+                }
+
+                // Check for stop or if block needs to be rebuilt
+                //UninterruptibleSleep(std::chrono::milliseconds{1});
+                if (fStopPowMining.load(std::memory_order_relaxed)) {
+                    return;
+                }
+
+                // Regtest mode doesn't require peers
+                if (connman.GetNodeCount(ConnectionDirection::Both) == 0 && params.GetChainTypeString() != "regtest")
+                    break;
+
+                if (nNonce >= 0xffff0000)
+                    break;
+
+                if (mempool.GetTransactionsUpdated() != nTransactionsUpdatedLast && GetTime() - nStart > 60)
+                    break;
+
+                if (pindexPrev != chainman.ActiveChain().Tip())
+                    break;
+
+                // Update nTime every few seconds
+                if (UpdateTime(pblock, params.GetConsensus(), pindexPrev) < 0)
+                    break; // Recreate the block if the clock has run backwards,
+                           // so that we can use the correct time.
+
+                if (params.GetConsensus().fPowAllowMinDifficultyBlocks)
+                {
+                    // Changing pblock->nTime can change work required on testnet:
+                    hashTarget.SetCompact(pblock->nBits);
+                }
+            }
+        }
+    }
+    catch (const std::runtime_error &e)
+    {
+        LogPrintf("THA PoW miner thread %i runtime error %s\n", thread_index, e.what());
+        return;
+    }
+}
+
+
+void GeneratePowBlocks(CConnman& connman, ChainstateManager& chainman, const CTxMemPool& mempool, bool fGenerate, int nThreads)
+{
+    static std::vector<std::thread> minerThreads;
+
+    if (nThreads < 0)
+        nThreads = GetNumCores();
+
+    if (minerThreads.size() > 0)
+    {
+        fStopPowMining.store(true, std::memory_order_relaxed);
+        minerThreads.resize(0);
+    }
+
+    if (nThreads == 0 || !fGenerate)
+        return;
+
+    fStopPowMining.store(false, std::memory_order_relaxed);
+
+    for (int i = 0; i < nThreads; i++)
+    {
+        minerThreads.emplace_back(PowMiner, i, std::cref(connman), std::ref(chainman), std::cref(mempool));
+        minerThreads.at(i).detach();
+    }
+
+}
+
 #endif
-
-
-
 
 } // namespace node

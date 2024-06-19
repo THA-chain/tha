@@ -32,6 +32,8 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "setmocktime", 0, "timestamp" },
     { "mockscheduler", 0, "delta_time" },
     { "utxoupdatepsbt", 1, "descriptors" },
+    { "setgenerate", 0, "generate" },
+    { "setgenerate", 1, "nproclimit" },
     { "generatetoaddress", 0, "nblocks" },
     { "generatetoaddress", 2, "maxtries" },
     { "generatetodescriptor", 0, "num_blocks" },
