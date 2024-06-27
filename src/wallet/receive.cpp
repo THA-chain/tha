@@ -150,7 +150,7 @@ CAmount CachedTxGetImmatureCredit(const CWallet& wallet, const CWalletTx& wtx, c
     AssertLockHeld(wallet.cs_wallet);
 
     if (wallet.IsTxImmatureCoinBase(wtx) && wallet.IsTxInMainChain(wtx)) {
-        return GetCachableAmount(wallet, wtx, CWalletTx::IMMATURE_CREDIT, filter) - GetCachableAmount(wallet, wtx, CWalletTx::DEBIT, filter);
+        return GetCachableAmount(wallet, wtx, CWalletTx::IMMATURE_CREDIT, filter);
     }
 
     return 0;
