@@ -101,6 +101,7 @@ public:
         consensus.signet_blocks = false;
         consensus.signet_challenge.clear();
         consensus.nSubsidyHalvingInterval = 210000;
+        consensus.nSubsidyHalvingOffset = 5098;
         consensus.BIP34Height = 1;
         consensus.BIP34Hash = uint256();
         consensus.BIP65Height = 1;
@@ -257,6 +258,7 @@ public:
         consensus.signet_blocks = false;
         consensus.signet_challenge.clear();
         consensus.nSubsidyHalvingInterval = 210000;
+        consensus.nSubsidyHalvingOffset = 5098;
         consensus.BIP34Height = 1;
         consensus.BIP34Hash = uint256();
         consensus.BIP65Height = 1;
@@ -450,6 +452,7 @@ public:
         consensus.signet_blocks = true;
         consensus.signet_challenge.assign(bin.begin(), bin.end());
         consensus.nSubsidyHalvingInterval = 210000;
+        consensus.nSubsidyHalvingOffset = 5098;
         consensus.BIP34Height = 1;
         consensus.BIP34Hash = uint256{};
         consensus.BIP65Height = 1;
@@ -587,6 +590,7 @@ public:
         consensus.signet_blocks = false;
         consensus.signet_challenge.clear();
         consensus.nSubsidyHalvingInterval = 150;
+        consensus.nSubsidyHalvingOffset = 0;
         consensus.BIP34Height = 1; // Always active unless overridden
         consensus.BIP34Hash = uint256();
         consensus.BIP65Height = 1;  // Always active unless overridden

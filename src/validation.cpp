@@ -1669,7 +1669,8 @@ CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
     if (nHeight == 2)
         return consensusParams.premine_amount_2;
 
-    int halvings = nHeight / consensusParams.nSubsidyHalvingInterval;
+    // make halving kick in nSubsidyHalvingOffset blocks earlier to compensate premine and retain 21M total supply
+    int halvings = (nHeight + consensusParams.nSubsidyHalvingOffset) / consensusParams.nSubsidyHalvingInterval;
     // Force block reward to zero when right shift is undefined.
     if (halvings >= 64)
         return 0;
