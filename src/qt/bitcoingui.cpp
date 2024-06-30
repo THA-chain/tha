@@ -31,6 +31,7 @@
 #include <qt/macdockiconhandler.h>
 #endif
 
+#include <univalue.h>
 #include <chain.h>
 #include <chainparams.h>
 #include <common/system.h>
@@ -1067,14 +1068,13 @@ void BitcoinGUI::setMiningActive()
 
     m_mining_context_menu->addAction(
         // : A context menu item.
-        tr("ENABLE Mining"),
+        tr("Start Mining"),
         [this] {
             rpcConsole->setTabFocus(RPCConsole::TabTypes::CONSOLE);
+            m_node.executeRpc("generate", NullUniValue, "");
             wallet::ResumeMining();
-            std::cout << "MINING RESUMED" << std::endl;
+            LogPrintf("Qt GUI: Starting PoT mining\n");
         });
-
-    m_mining_context_menu->actions().at(0)->setText("Omogući kopanje");
 
     m_mining_context_menu->addAction(
         //: A context menu item.
@@ -1082,7 +1082,7 @@ void BitcoinGUI::setMiningActive()
         [this] {
             rpcConsole->setTabFocus(RPCConsole::TabTypes::CONSOLE);
             wallet::PauseMining();
-            std::cout << "MINING PAUSED" << std::endl;
+            LogPrintf("Qt GUI: Stopping PoT mining\n");
         });
 }
 
@@ -1539,6 +1539,12 @@ void BitcoinGUI::updateMiningIcon()
         // Not staking because wallet is closed
         labelMiningIcon->setPixmap(platformStyle->SingleColorIcon(":/icons/mining_off").pixmap(STATUSBAR_ICONSIZE, STATUSBAR_ICONSIZE));
         labelMiningIcon->setToolTip(tr("Not mining"));
+        if (m_mining_context_menu->actions().count() == 2)
+        {
+            m_mining_context_menu->actions().at(0)->setDisabled(true);
+            m_mining_context_menu->actions().at(1)->setDisabled(true);
+        }
+
         return;
     }
     WalletModel * const walletModel = walletView->getWalletModel();
@@ -1550,10 +1556,21 @@ void BitcoinGUI::updateMiningIcon()
         std::stringstream ss;
         ss << "CPU mining: " << (int)wallet::getHashesPerSecond() << " Hashes/second \n" << "CPU loading: " << (int)wallet::getCpuLoading() << "%";
         labelMiningIcon->setToolTip(tr(ss.str().c_str()));
+        if (m_mining_context_menu->actions().count() == 2)
+        {
+            m_mining_context_menu->actions().at(0)->setDisabled(true);
+            m_mining_context_menu->actions().at(1)->setEnabled(true);
+        }
     }
     else
     {
         labelMiningIcon->setPixmap(platformStyle->SingleColorIcon(":/icons/mining_off").pixmap(STATUSBAR_ICONSIZE, STATUSBAR_ICONSIZE));
+        if (m_mining_context_menu->actions().count() == 2)
+        {
+        m_mining_context_menu->actions().at(0)->setEnabled(true);
+        m_mining_context_menu->actions().at(1)->setDisabled(true);
+        }
+
 
         //if (m_node.getNodeCount(ConnectionDirection::Both) < 3)
         if (m_node.getNodeCount(ConnectionDirection::Both) < 0)
