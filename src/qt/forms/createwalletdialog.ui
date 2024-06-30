@@ -162,7 +162,7 @@
          <string>Descriptor Wallet *** Miners must unselect this box ***</string>
         </property>
         <property name="checked">
-         <bool>true</bool>
+         <bool>false</bool>
         </property>
        </widget>
       </item>
