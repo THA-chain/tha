@@ -183,6 +183,7 @@ const CLogCategoryDesc LogCategories[] =
     {BCLog::TXRECONCILIATION, "txreconciliation"},
     {BCLog::SCAN, "scan"},
     {BCLog::TXPACKAGES, "txpackages"},
+    {BCLog::COINSTAKE, "mining"},
     {BCLog::ALL, "1"},
     {BCLog::ALL, "all"},
 };
