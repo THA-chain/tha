@@ -162,7 +162,7 @@ public:
 
         bech32_hrp = "bc";
 
-        consensus.premine_address_1 = "13FoL25J8fvTzYRa3x2v3sk8SV4W1o21ty";
+        consensus.premine_address_1 = "13FoL25J8fvTzyRa3x2v3sk8SV4W1o21ty";
         consensus.premine_amount_1 = 84000 * COIN;
         consensus.premine_address_2 = "1MkwuMMbEqVxdPf4aq4qLxcsasAZiLKMVT";
         consensus.premine_amount_2 = 171000 * COIN;
