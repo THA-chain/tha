@@ -89,7 +89,7 @@ static const int64_t DEFAULT_PEER_CONNECT_TIMEOUT = 60;
 static const int NUM_FDS_MESSAGE_CAPTURE = 1;
 
 static constexpr bool DEFAULT_FORCEDNSSEED{false};
-static constexpr bool DEFAULT_DNSSEED{true};
+static constexpr bool DEFAULT_DNSSEED{false};
 static constexpr bool DEFAULT_FIXEDSEEDS{true};
 static const size_t DEFAULT_MAXRECEIVEBUFFER = 5 * 1000;
 static const size_t DEFAULT_MAXSENDBUFFER    = 1 * 1000;
