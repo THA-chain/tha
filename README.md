@@ -1,42 +1,47 @@
-Complete Setup Guide for THA Core and Scripts
-Step 1: Install THA Core and Dependencies
-Install Python and Git:
+README.md
+markdown
+Copy code
+# THA Core and Scripts Setup Guide
+
+This guide will help you set up THA Core and the associated scripts for monitoring and automating transactions.
+
+## Step 1: Install Dependencies
+
 Ensure Python and Git are installed on your system:
 
-bash
-Copy code
+```bash
 sudo apt update
 sudo apt install python3 python3-pip git
-Clone THA Core Repository:
+Step 2: Clone THA Core Repository
 Use Git to clone the THA Core repository from GitHub:
 
 bash
 Copy code
 gh repo clone nucash-mining/tha-mining
 cd tha-mining
-Build and Install THA Core:
-Follow the installation instructions provided in the repository, typically involving configuration and compilation:
+Step 3: Build and Install THA Core
+Follow the installation instructions provided in the repository:
 
 bash
 Copy code
 ./configure
 make
 sudo make install
-Step 2: Set Up SEND and RECEIVE Wallets
-Initialize the THA Core Daemon:
+Step 4: Set Up SEND and RECEIVE Wallets
+Initialize the THA Core Daemon
 Start the THA Core daemon to interact with the blockchain:
 
 bash
 Copy code
 thad -daemon
-Create SEND and RECEIVE Wallets:
+Create SEND and RECEIVE Wallets
 If THA Core does not automatically create default wallets, create them manually:
 
 bash
 Copy code
 tha-cli createwallet "SEND"
 tha-cli createwallet "RECEIVE"
-Generate Wallet Addresses:
+Generate Wallet Addresses
 Generate new addresses for both wallets to use for transactions:
 
 bash
@@ -45,8 +50,9 @@ send_address=$(tha-cli -rpcwallet=SEND getnewaddress)
 receive_address=$(tha-cli -rpcwallet=RECEIVE getnewaddress)
 echo "SEND Wallet Address: $send_address"
 echo "RECEIVE Wallet Address: $receive_address"
-Set up the Python script to monitor transactions:
-Deploy a Python script (TransactionListener.py) that listens for incoming transactions and waits for one confirmation. This script should be ready in the directory from which you are running the commands.
+Step 5: Deploy the Python Scripts
+Transaction Listener Script
+Create a file named TransactionListener.py and add the following content:
 
 python
 Copy code
@@ -75,8 +81,8 @@ class THARpcClient:
         return self.call('gettransaction', [txid])
 
 if __name__ == '__main__':
-    rpc_user = 'nucash'
-    rpc_password = 'x'
+    rpc_user = input('Enter RPC username: ')
+    rpc_password = input('Enter RPC password: ')
     wallet_name = 'SEND'
     client = THARpcClient(rpc_user, rpc_password, wallet_name)
 
@@ -92,15 +98,8 @@ if __name__ == '__main__':
             time.sleep(60)  # Wait for a minute before checking again
     except Exception as e:
         print(f"An error occurred: {e}")
-Step 3: Deploy Script to Send First Transaction & Deploy Transaction Confirmation Trigger and Re-director Scripts
-Send THA from SEND to RECEIVE wallet:
-Send 0.1 THA plus fees:
-
-bash
-Copy code
-tha-cli -rpcwallet=SEND sendtoaddress "$receive_address" 0.1 "" "" false true 0.0001 SUBTRACTFEEFROMAMOUNT
-Deploy a script to send THA to the recipient address:
-Save this script as SendTHATransaction.py:
+Send THA Transaction Script
+Create a file named SendTHATransaction.py and add the following content:
 
 python
 Copy code
@@ -125,8 +124,8 @@ class THARpcClient:
         return self.call('sendtoaddress', [address, amount])
 
 if __name__ == '__main__':
-    rpc_user = 'nucash'
-    rpc_password = 'x'
+    rpc_user = input('Enter RPC username: ')
+    rpc_password = input('Enter RPC password: ')
     wallet_path = 'SEND'
     recipient_address = '1BSxJvD1iGv9UYHFU1uTVvxD7L4kT6W58s'
     amount = 0.1
@@ -140,8 +139,8 @@ if __name__ == '__main__':
 
     except Exception as e:
         print(f"An error occurred: {e}")
-Deploy Block Reward Confirmation Trigger BlockRewardConfirmationTrigger.py:
-Save this script in your project directory:
+Block Reward Confirmation Trigger Script
+Create a file named BlockRewardConfirmationTrigger.py and add the following content:
 
 python
 Copy code
@@ -176,8 +175,8 @@ def trigger_transactions_script():
     # Example: os.system('python3 send_transactions.py')
 
 if __name__ == '__main__':
-    rpc_user = 'nucash'
-    rpc_password = 'x'
+    rpc_user = input('Enter RPC username: ')
+    rpc_password = input('Enter RPC password: ')
     wallet_name = 'SEND'
     expected_amount = 50
     client = THARpcClient(rpc_user, rpc_password, wallet_name)
@@ -194,8 +193,8 @@ if __name__ == '__main__':
             time.sleep(60)
     except Exception as e:
         print(f"An error occurred: {e}")
-Deploy Mining Reward Redirector Script:
-Save this script as MiningRewardRedirector.py:
+Mining Reward Redirector Script
+Create a file named MiningRewardRedirector.py and add the following content:
 
 python
 Copy code
@@ -227,8 +226,8 @@ class THARpcClient:
         return self.call('sendtoaddress', [address, amount])
 
 if __name__ == '__main__':
-    rpc_user = 'nucash'
-    rpc_password = 'x'
+    rpc_user = input('Enter RPC username: ')
+    rpc_password = input('Enter RPC password: ')
     wallet_name = 'RECEIVE'
     send_address = '1HXJUf7zwHZ5K2vhf9fMueMkXzjMUgDv6k'
     client = THARpcClient(rpc_user, rpc_password, wallet_name)
@@ -247,9 +246,8 @@ if __name__ == '__main__':
             time.sleep(60)
     except Exception as e:
         print(f"An error occurred: {e}")
-Step 4: Automate Execution with a Bash Script
-Create a bash script to automate the setup and run the listener:
-Create a file named setup_and_monitor.sh and include the following content:
+Step 6: Automate Execution with a Bash Script
+Create a file named setup_and_monitor.sh and add the following content:
 
 bash
 Copy code
@@ -258,6 +256,12 @@ Copy code
 # Install Python and Git
 sudo apt update
 sudo apt install -y python3 python3-pip git
+
+# Prompt for user input
+echo "Enter RPC username: "
+read rpc_user
+echo "Enter RPC password: "
+read -s rpc_password
 
 # Clone THA Core
 gh repo clone nucash-mining/tha-mining
@@ -281,6 +285,10 @@ receive_address=$(tha-cli -rpcwallet=RECEIVE getnewaddress)
 echo "SEND Wallet Address: $send_address" > wallet_addresses.txt
 echo "RECEIVE Wallet Address: $receive_address" >> wallet_addresses.txt
 
+# Save the user input to environment variables for the Python scripts
+export RPC_USER=$rpc_user
+export RPC_PASSWORD=$rpc_password
+
 # Run the transaction listener script
 python3 TransactionListener.py
 Make the script executable:
@@ -288,16 +296,13 @@ Make the script executable:
 bash
 Copy code
 chmod +x setup_and_monitor.sh
-Run the setup script:
+Run your setup script:
 
 bash
 Copy code
 ./setup_and_monitor.sh
-Step 5: Document Everything
+Step 7: Document Everything
 Prepare a README.md:
-Document each step, the purpose of each script, and how to run them. Include troubleshooting tips and configuration options.
-
-Example content for README.md:
 
 markdown
 Copy code
@@ -357,5 +362,9 @@ Feel free to fork this repository and submit pull requests to contribute to the 
 License
 MIT
 
+vbnet
 Copy code
-This revised guide includes all the required steps and integrates each of the scripts you mentioned. Each step is designed to be clear and executable, making the entire process straightforward for users.
+
+### Conclusion
+
+By following the above guide, users can install dependencies, set up their THA Core environment, and automate transactions with the provided scripts. This README.md will be accessible on your GitHub repository, and users can follow it step-by-step to replicate your setup. The `setup_and_monitor.sh` script will automate the entire process, reducing the manual effort required.
