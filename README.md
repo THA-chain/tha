@@ -3,12 +3,12 @@ Step 1: Install THA Core and Dependencies
 Install Python and Git:
 Ensure Python and Git are installed on your system:
 
-bash
+```bash
 Copy code
 sudo apt update
 sudo apt install python3 python3-pip git
 Clone THA Core Repository:
-Use Git to clone the THA Core repository from GitHub:
+Use Git to clone the THA Core repository from GitHub: ```
 
 bash
 Copy code
