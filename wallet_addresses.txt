@@ -1,0 +1,2 @@
+SEND Wallet Address: 16ftFgQsyNQxBFapS7uVMLTVrq5SGYUmUg
+RECEIVE Wallet Address: 1LupkpU7KfcS1gXtLLE7Yp2j8JJC3taK4U
