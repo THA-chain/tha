@@ -4278,43 +4278,41 @@ bool ChainstateManager::AcceptBlock(const std::shared_ptr<const CBlock>& pblock,
     if (!accepted_header)
         return false;
 
-    if(block.IsProofOfWork()) {
-        if (!UpdateHashProof(block, state, GetConsensus(), pindex, m_active_chainstate->CoinsTip()))
-        {
-            return error("%s: AcceptBlock(): %s", __func__, state.GetRejectReason().c_str());
+    if (block.GetHash() != GetConsensus().hashGenesisBlock) {
+        if(block.IsProofOfWork()) {
+            if (!UpdateHashProof(block, state, GetConsensus(), pindex, m_active_chainstate->CoinsTip()))
+            {
+                return error("%s: AcceptBlock(): %s", __func__, state.GetRejectReason().c_str());
+            }
         }
+
+        // Get prev block index
+        CBlockIndex* pindexPrev = nullptr;
+        BlockMap::iterator mi{m_blockman.m_block_index.find(block.hashPrevBlock)};
+        if (mi == m_blockman.m_block_index.end()) {
+            return state.Invalid(BlockValidationResult::BLOCK_MISSING_PREV, "prev-block-not-found", "AcceptBlock() : prev block not found");
+        }
+        pindexPrev = &((*mi).second);
+
+        // Get block height
+        int nHeight = pindex->nHeight;
+
+        // Check for the last proof of work block
+        if (block.IsProofOfWork() && nHeight > GetConsensus().nLastPOWBlock)
+            return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "bad-proof-of-work", strprintf("AcceptBlock() : reject proof-of-work at height %d", nHeight));
+
+        // Check for the early proof of stake block
+        if (block.IsProofOfStake() && nHeight <= GetConsensus().nLastPOWBlock)
+            return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "bad-proof-of-stake", strprintf("AcceptBlock() : reject proof-of-stake at height %d", nHeight));
+
+        // Check timestamp against prev
+        if (pindexPrev && block.IsProofOfStake() && (block.GetBlockTime() <= pindexPrev->GetBlockTime() || FutureDrift(block.GetBlockTime()) < pindexPrev->GetBlockTime()))
+            return error("AcceptBlock() : block's timestamp is too early");
+
+        // Check timestamp
+        if (block.IsProofOfStake() &&  block.GetBlockTime() > FutureDrift(GetAdjustedTime64()))
+            return error("AcceptBlock() : block timestamp too far in the future");
     }
-
-
-    // Get prev block index
-    CBlockIndex* pindexPrev = nullptr;
-    BlockMap::iterator mi{m_blockman.m_block_index.find(block.hashPrevBlock)};
-    if (mi == m_blockman.m_block_index.end()) {
-        return state.Invalid(BlockValidationResult::BLOCK_MISSING_PREV, "prev-block-not-found", "AcceptBlock() : prev block not found");
-    }
-    pindexPrev = &((*mi).second);
-
-
-    // Get block height
-    int nHeight = pindex->nHeight;
-
-    // Check for the last proof of work block
-    if (block.IsProofOfWork() && nHeight > GetConsensus().nLastPOWBlock)
-        return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "bad-proof-of-work", strprintf("AcceptBlock() : reject proof-of-work at height %d", nHeight));
-
-    // Check for the early proof of stake block
-    if (block.IsProofOfStake() && nHeight <= GetConsensus().nLastPOWBlock)
-        return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "bad-proof-of-stake", strprintf("AcceptBlock() : reject proof-of-stake at height %d", nHeight));
-
-    // Check timestamp against prev
-    if (pindexPrev && block.IsProofOfStake() && (block.GetBlockTime() <= pindexPrev->GetBlockTime() || FutureDrift(block.GetBlockTime()) < pindexPrev->GetBlockTime()))
-        return error("AcceptBlock() : block's timestamp is too early");
-
-    // Check timestamp
-    if (block.IsProofOfStake() &&  block.GetBlockTime() > FutureDrift(GetAdjustedTime64()))
-        return error("AcceptBlock() : block timestamp too far in the future");
-
-
 
 
     // Check all requested blocks that we do not already have for validity and
