@@ -5,7 +5,7 @@ Copy code
 
 This guide will help you set up THA Core and the associated scripts for monitoring and automating transactions.
 
-## Step 1: Install Dependencies
+## ***Step 1: Install Dependencies***
 
 Ensure Python and Git are installed on your system:
 
