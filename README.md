@@ -11,7 +11,7 @@ Ensure Python and Git are installed on your system:
 
 ```bash
 sudo apt update
-sudo apt install python3 python3-pip git
+sudo apt install python3 python3-pip git```
 Step 2: Clone THA Core Repository
 Use Git to clone the THA Core repository from GitHub:
 
