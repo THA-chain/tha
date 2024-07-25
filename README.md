@@ -168,7 +168,6 @@ if __name__ == '__main__':
 Create a file named BlockRewardConfirmationTrigger.py and add the following content:
 
 `python`
-`Copy code`
 ```
 import requests
 import json
@@ -410,7 +409,6 @@ Feel free to fork this repository and submit pull requests to contribute to the 
 ```
 vbnet
 ```
-`Copy code`
 
 ### Conclusion
 
