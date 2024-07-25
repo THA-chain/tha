@@ -11,8 +11,7 @@ This guide will help you set up THA Core and the associated scripts for monitori
 
 
 ```
-bash
-Copy code
+`bash`
 
 sudo apt update
 sudo apt install python3 python3-pip git
