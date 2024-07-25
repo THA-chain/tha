@@ -23,7 +23,8 @@ sudo apt install python3 python3-pip git```
 `Copy code`
 ```
 gh repo clone nucash-mining/tha-mining
-cd tha-mining```
+cd tha-mining
+```
 
 ## Step 3: Build and Install THA Core: 
 
@@ -34,7 +35,8 @@ cd tha-mining```
 ```
 ./configure
 make
-sudo make install```
+sudo make install
+```
 
 
 ## Step 4: Set Up SEND and RECEIVE Wallets
@@ -47,7 +49,8 @@ Start the THA Core daemon to interact with the blockchain:***
 `Copy code`
 ```
 thad -daemon
-Create SEND and RECEIVE Wallets```
+Create SEND and RECEIVE Wallets
+```
 
 ***If THA Core does not automatically create default wallets, create them manually:***
 
@@ -56,7 +59,8 @@ Create SEND and RECEIVE Wallets```
 ```
 tha-cli createwallet "SEND"
 tha-cli createwallet "RECEIVE"
-Generate Wallet Addresses```
+Generate Wallet Addresses
+```
 
 ***Generate new addresses for both wallets to use for transactions:***
 
@@ -66,7 +70,8 @@ Generate Wallet Addresses```
 send_address=$(tha-cli -rpcwallet=SEND getnewaddress)
 receive_address=$(tha-cli -rpcwallet=RECEIVE getnewaddress)
 echo "SEND Wallet Address: $send_address"
-echo "RECEIVE Wallet Address: $receive_address"```
+echo "RECEIVE Wallet Address: $receive_address"
+```
 
 ## Step 5: Deploy the Python Scripts
 ***Transaction Listener Script
@@ -160,9 +165,10 @@ if __name__ == '__main__':
         print(f"Transaction ID: {txid}")
 
     except Exception as e:
-        print(f"An error occurred: {e}")
-Block Reward Confirmation Trigger Script
-Create a file named BlockRewardConfirmationTrigger.py and add the following content:
+        print(f"An error occurred: {e}")```
+
+***Block Reward Confirmation Trigger Script
+Create a file named BlockRewardConfirmationTrigger.py and add the following content:***
 
 `python`
 `Copy code`
@@ -216,11 +222,13 @@ if __name__ == '__main__':
             time.sleep(60)
     except Exception as e:
         print(f"An error occurred: {e}")```
-Mining Reward Redirector Script
-Create a file named MiningRewardRedirector.py and add the following content:
 
-python
-Copy code
+***Mining Reward Redirector Script
+Create a file named MiningRewardRedirector.py and add the following content:***
+
+`python`
+`Copy code`
+```
 import requests
 import json
 import time
@@ -268,7 +276,8 @@ if __name__ == '__main__':
                         print(f"Sent {amount} THA back to {send_address}. Transaction ID: {send_txid}")
             time.sleep(60)
     except Exception as e:
-        print(f"An error occurred: {e}")```
+        print(f"An error occurred: {e}")
+        ```
 
 ## Step 6: Automate Execution with a Bash Script:
 ***Create a file named setup_and_monitor.sh and add the following content:***
@@ -314,15 +323,20 @@ echo "RECEIVE Wallet Address: $receive_address" >> wallet_addresses.txt
 export RPC_USER=$rpc_user
 export RPC_PASSWORD=$rpc_password
 
+
 # Run the transaction listener script
+
 python3 TransactionListener.py
-Make the script executable:
+
+
+# Make the script executable:
 
 `bash`
 `Copy code`
 ```
 chmod +x setup_and_monitor.sh
 ```
+
 ***Run your setup script:***
 
 `bash`
@@ -331,9 +345,9 @@ chmod +x setup_and_monitor.sh
 ./setup_and_monitor.sh
 ```
 
-***Step 7: Document Everything
+## Step 7: Document Everything
 
-Prepare a README.md:***
+***Prepare a README.md:***
 
 `markdown`
 `Copy code`
@@ -360,7 +374,8 @@ Prepare a README.md:***
 - **BlockRewardConfirmationTrigger.py**
   - **Purpose**: Listens for incoming transactions of newly mined coins to the SEND wallet and triggers a batch transaction process.
   - **Usage**:
-    ```bash
+    `bash`
+    ```
     python3 BlockRewardConfirmationTrigger.py
     ```
 
