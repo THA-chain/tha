@@ -10,9 +10,9 @@ This guide will help you set up THA Core and the associated scripts for monitori
 ***Ensure Python and Git are installed on your system***
 
 
-```
-`bash`
 
+`bash`
+```
 sudo apt update
 sudo apt install python3 python3-pip git
 ```
@@ -22,7 +22,6 @@ sudo apt install python3 python3-pip git
 ***Use Git to clone the THA Core repository from GitHub***
 
 `bash`
-`Copy code`
 ```
 gh repo clone nucash-mining/tha-mining
 cd tha-mining
@@ -33,7 +32,6 @@ cd tha-mining
 ***Follow the installation instructions provided in the repository***
 
 `bash`
-`Copy code`
 ```
 ./configure
 make
@@ -48,7 +46,6 @@ sudo make install
 Start the THA Core daemon to interact with the blockchain:
 
 `bash`
-`Copy code`
 ```
 thad -daemon
 Create SEND and RECEIVE Wallets
@@ -57,7 +54,6 @@ Create SEND and RECEIVE Wallets
 ***If THA Core does not automatically create default wallets, create them manually***
 
 `bash`
-`Copy code`
 ```
 tha-cli createwallet "SEND"
 tha-cli createwallet "RECEIVE"
@@ -67,7 +63,6 @@ Generate Wallet Addresses
 ***Generate new addresses for both wallets to use for transactions***
 
 `bash`
-`Copy code`
 ```
 send_address=$(tha-cli -rpcwallet=SEND getnewaddress)
 receive_address=$(tha-cli -rpcwallet=RECEIVE getnewaddress)
@@ -81,7 +76,6 @@ echo "RECEIVE Wallet Address: $receive_address"
 Create a file named TransactionListener.py and add the following content:
 
 `python`
-`Copy code`
 ```
 import requests
 import json
@@ -131,7 +125,6 @@ if __name__ == '__main__':
 Create a file named SendTHATransaction.py and add the following content:
 
 `python`
-`Copy code`
 ```
 import requests
 import json
@@ -169,7 +162,8 @@ if __name__ == '__main__':
 
     except Exception as e:
         print(f"An error occurred: {e}")
-```        
+```
+
 ***Block Reward Confirmation Trigger Script***
 Create a file named BlockRewardConfirmationTrigger.py and add the following content:
 
@@ -230,7 +224,6 @@ if __name__ == '__main__':
 Create a file named MiningRewardRedirector.py and add the following content:
 
 `python`
-`Copy code`
 ```
 import requests
 import json
@@ -286,7 +279,6 @@ if __name__ == '__main__':
 ***Create a file named setup_and_monitor.sh and add the following content:***
 
 `bash`
-`Copy code`
 ```
 #!/bin/bash
 
@@ -332,14 +324,12 @@ python3 TransactionListener.py
 ***Make the script executable:***
 
 `bash`
-`Copy code`
 ```
 chmod +x setup_and_monitor.sh
 ```
 ***Run your setup script:***
 
 `bash`
-`Copy code`
 ```
 ./setup_and_monitor.sh
 ```
@@ -349,7 +339,6 @@ chmod +x setup_and_monitor.sh
 ***Prepare a README.md:***
 
 `markdown`
-`Copy code`
 # THA Mining and Transaction Automation Scripts
 
 ***This repository contains a collection of scripts designed to automate various tasks related to THA cryptocurrency operations, such as monitoring wallets for new block rewards and automating transactions.***
@@ -366,7 +355,7 @@ chmod +x setup_and_monitor.sh
 - **MiningRewardRedirector.py**
   - **Purpose**: Monitors the RECEIVE wallet for new block rewards and forwards them to a specific address.
   - **Usage**:
-    `bash`
+`bash`
 ```
     python3 MiningRewardRedirector.py
 ```
