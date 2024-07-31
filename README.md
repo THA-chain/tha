@@ -4,7 +4,7 @@ markdown
 Copy code
 # THA Core and Scripts Setup Guide
 
-This guide will help you set up THA Core and the associated scripts for monitoring and automating transactions to start the mining process on Linux OS.
+This guide will help you set up THA Core and the associated scripts for monitoring and automating transactions to start the mining process on Windows OS.
 
 ## Step 1: Install Dependencies
 
