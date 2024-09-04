@@ -90,6 +90,10 @@ CoinControlDialog::CoinControlDialog(CCoinControl& coin_control, WalletModel* _m
     connect(ui->radioTreeMode, &QRadioButton::toggled, this, &CoinControlDialog::radioTreeMode);
     connect(ui->radioListMode, &QRadioButton::toggled, this, &CoinControlDialog::radioListMode);
 
+    // toggle hide/show dust
+    connect(ui->radioHideDust, &QRadioButton::toggled, this, &CoinControlDialog::radioHideDust);
+    connect(ui->radioShowDust, &QRadioButton::toggled, this, &CoinControlDialog::radioShowDust);
+
     // click on checkbox
     connect(ui->treeWidget, &QTreeWidget::itemChanged, this, &CoinControlDialog::viewItemChanged);
 
@@ -341,6 +345,20 @@ void CoinControlDialog::radioListMode(bool checked)
         updateView();
 }
 
+// toggle hide dust
+void CoinControlDialog::radioHideDust(bool checked)
+{
+    if (checked && model)
+        updateView();
+}
+
+// toggle show dust
+void CoinControlDialog::radioShowDust(bool checked)
+{
+    if (checked && model)
+        updateView();
+}
+
 // checkbox clicked by user
 void CoinControlDialog::viewItemChanged(QTreeWidgetItem* item, int column)
 {
@@ -564,6 +582,7 @@ void CoinControlDialog::updateView()
         return;
 
     bool treeMode = ui->radioTreeMode->isChecked();
+    bool hideDust = ui->radioHideDust->isChecked();
 
     ui->treeWidget->clear();
     ui->treeWidget->setEnabled(false); // performance, otherwise updateLabels would be called for every checked checkbox
@@ -600,71 +619,75 @@ void CoinControlDialog::updateView()
         for (const auto& outpair : coins.second) {
             const COutPoint& output = std::get<0>(outpair);
             const interfaces::WalletTxOut& out = std::get<1>(outpair);
-            nSum += out.txout.nValue;
-            nChildren++;
 
-            CCoinControlWidgetItem *itemOutput;
-            if (treeMode)    itemOutput = new CCoinControlWidgetItem(itemWalletAddress);
-            else             itemOutput = new CCoinControlWidgetItem(ui->treeWidget);
-            itemOutput->setFlags(flgCheckbox);
-            itemOutput->setCheckState(COLUMN_CHECKBOX,Qt::Unchecked);
+            // hide dust inputs if asked to
+            if (!hideDust || (hideDust && out.txout.nValue > DEFAULT_STAKING_MIN_UTXO_VALUE)) {
+                nSum += out.txout.nValue;
+                nChildren++;
 
-            // address
-            CTxDestination outputAddress;
-            QString sAddress = "";
-            if(ExtractDestination(out.txout.scriptPubKey, outputAddress))
-            {
-                sAddress = QString::fromStdString(EncodeDestination(outputAddress));
+                CCoinControlWidgetItem *itemOutput;
+                if (treeMode)    itemOutput = new CCoinControlWidgetItem(itemWalletAddress);
+                else             itemOutput = new CCoinControlWidgetItem(ui->treeWidget);
+                itemOutput->setFlags(flgCheckbox);
+                itemOutput->setCheckState(COLUMN_CHECKBOX,Qt::Unchecked);
 
-                // if listMode or change => show bitcoin address. In tree mode, address is not shown again for direct wallet address outputs
-                if (!treeMode || (!(sAddress == sWalletAddress)))
-                    itemOutput->setText(COLUMN_ADDRESS, sAddress);
+                // address
+                CTxDestination outputAddress;
+                QString sAddress = "";
+                if(ExtractDestination(out.txout.scriptPubKey, outputAddress))
+                {
+                    sAddress = QString::fromStdString(EncodeDestination(outputAddress));
+
+                    // if listMode or change => show bitcoin address. In tree mode, address is not shown again for direct wallet address outputs
+                    if (!treeMode || (!(sAddress == sWalletAddress)))
+                        itemOutput->setText(COLUMN_ADDRESS, sAddress);
+                }
+
+                // label
+                if (!(sAddress == sWalletAddress)) // change
+                {
+                    // tooltip from where the change comes from
+                    itemOutput->setToolTip(COLUMN_LABEL, tr("change from %1 (%2)").arg(sWalletLabel).arg(sWalletAddress));
+                    itemOutput->setText(COLUMN_LABEL, tr("(change)"));
+                }
+                else if (!treeMode)
+                {
+                    QString sLabel = model->getAddressTableModel()->labelForAddress(sAddress);
+                    if (sLabel.isEmpty())
+                        sLabel = tr("(no label)");
+                    itemOutput->setText(COLUMN_LABEL, sLabel);
+                }
+
+                // amount
+                itemOutput->setText(COLUMN_AMOUNT, BitcoinUnits::format(nDisplayUnit, out.txout.nValue));
+                itemOutput->setData(COLUMN_AMOUNT, Qt::UserRole, QVariant((qlonglong)out.txout.nValue)); // padding so that sorting works correctly
+
+                // date
+                itemOutput->setText(COLUMN_DATE, GUIUtil::dateTimeStr(out.time));
+                itemOutput->setData(COLUMN_DATE, Qt::UserRole, QVariant((qlonglong)out.time));
+
+                // confirmations
+                itemOutput->setText(COLUMN_CONFIRMATIONS, QString::number(out.depth_in_main_chain));
+                itemOutput->setData(COLUMN_CONFIRMATIONS, Qt::UserRole, QVariant((qlonglong)out.depth_in_main_chain));
+
+                // transaction hash
+                itemOutput->setData(COLUMN_ADDRESS, TxHashRole, QString::fromStdString(output.hash.GetHex()));
+
+                // vout index
+                itemOutput->setData(COLUMN_ADDRESS, VOutRole, output.n);
+
+                // disable locked coins
+                if (model->wallet().isLockedCoin(output))
+                {
+                    m_coin_control.UnSelect(output); // just to be sure
+                    itemOutput->setDisabled(true);
+                    itemOutput->setIcon(COLUMN_CHECKBOX, platformStyle->SingleColorIcon(":/icons/lock_closed"));
+                }
+
+                // set checkbox
+                if (m_coin_control.IsSelected(output))
+                    itemOutput->setCheckState(COLUMN_CHECKBOX, Qt::Checked);
             }
-
-            // label
-            if (!(sAddress == sWalletAddress)) // change
-            {
-                // tooltip from where the change comes from
-                itemOutput->setToolTip(COLUMN_LABEL, tr("change from %1 (%2)").arg(sWalletLabel).arg(sWalletAddress));
-                itemOutput->setText(COLUMN_LABEL, tr("(change)"));
-            }
-            else if (!treeMode)
-            {
-                QString sLabel = model->getAddressTableModel()->labelForAddress(sAddress);
-                if (sLabel.isEmpty())
-                    sLabel = tr("(no label)");
-                itemOutput->setText(COLUMN_LABEL, sLabel);
-            }
-
-            // amount
-            itemOutput->setText(COLUMN_AMOUNT, BitcoinUnits::format(nDisplayUnit, out.txout.nValue));
-            itemOutput->setData(COLUMN_AMOUNT, Qt::UserRole, QVariant((qlonglong)out.txout.nValue)); // padding so that sorting works correctly
-
-            // date
-            itemOutput->setText(COLUMN_DATE, GUIUtil::dateTimeStr(out.time));
-            itemOutput->setData(COLUMN_DATE, Qt::UserRole, QVariant((qlonglong)out.time));
-
-            // confirmations
-            itemOutput->setText(COLUMN_CONFIRMATIONS, QString::number(out.depth_in_main_chain));
-            itemOutput->setData(COLUMN_CONFIRMATIONS, Qt::UserRole, QVariant((qlonglong)out.depth_in_main_chain));
-
-            // transaction hash
-            itemOutput->setData(COLUMN_ADDRESS, TxHashRole, QString::fromStdString(output.hash.GetHex()));
-
-            // vout index
-            itemOutput->setData(COLUMN_ADDRESS, VOutRole, output.n);
-
-             // disable locked coins
-            if (model->wallet().isLockedCoin(output))
-            {
-                m_coin_control.UnSelect(output); // just to be sure
-                itemOutput->setDisabled(true);
-                itemOutput->setIcon(COLUMN_CHECKBOX, platformStyle->SingleColorIcon(":/icons/lock_closed"));
-            }
-
-            // set checkbox
-            if (m_coin_control.IsSelected(output))
-                itemOutput->setCheckState(COLUMN_CHECKBOX, Qt::Checked);
         }
 
         // amount

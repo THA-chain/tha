@@ -108,6 +108,8 @@ private Q_SLOTS:
     void clipboardChange();
     void radioTreeMode(bool);
     void radioListMode(bool);
+    void radioHideDust(bool);
+    void radioShowDust(bool);
     void viewItemChanged(QTreeWidgetItem*, int);
     void headerSectionClicked(int);
     void buttonBoxClicked(QAbstractButton*);
