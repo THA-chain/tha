@@ -132,8 +132,8 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nTimeout = 1776261600; // April 15th, 2026
         consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].min_activation_height = 0; // Approximately May 2024
 
-        consensus.nMinimumChainWork = uint256S("0x000000000000000000000000000000000000000000000000004f539f0d9039aa"); // 500
-        consensus.defaultAssumeValid = uint256S("0xfcdf0599d80caead50b695002dbb97f793abdb71597dc81e44b43f9182a1c9ae"); // 500
+        consensus.nMinimumChainWork = uint256S("0x000000000000000000000000000000000000000000000000fa956808c9291306"); // 11000
+        consensus.defaultAssumeValid = uint256S("0xfd17ecbfb9c9dfa01508c14d67397ab6c6ad6496d1b6de2a73174560504f1b5e"); // 11000
 
         /**
          * The message start string is designed to be unlikely to occur in normal data.
@@ -146,8 +146,8 @@ public:
         pchMessageStart[3] = 0xd9;
         nDefaultPort = 7222;
         nPruneAfterHeight = 100000;
-        m_assumed_blockchain_size = 0;
-        m_assumed_chain_state_size = 0;
+        m_assumed_blockchain_size = 1;
+        m_assumed_chain_state_size = 1;
 
         genesis = CreateGenesisBlock(1720004400, 1012858746, 0x1d00ffff, 1, 50 * COIN);
         consensus.hashGenesisBlock = genesis.GetHash();
@@ -178,6 +178,7 @@ public:
                 { 0, uint256S("0x00000000c9e15cb2b9175f8d7524ee65c45acfc87ad448900999d6e09f3b42de")},
                 { 37, uint256S("0xef6318c2651e085ff8a88bb076110de079f5a4b52a16de9bb90e5ff639de46f3")}, // 1st PoT block
                 { 500, uint256S("0xfcdf0599d80caead50b695002dbb97f793abdb71597dc81e44b43f9182a1c9ae")},
+                { 11000, uint256S("0xfd17ecbfb9c9dfa01508c14d67397ab6c6ad6496d1b6de2a73174560504f1b5e")},
             }
         };
 
@@ -186,9 +187,9 @@ public:
         };
 
         chainTxData = ChainTxData{
-            .nTime    = 1720258973,
-            .nTxCount = 161082,
-            .dTxRate  = 0.6805382454213228,
+            .nTime    = 1726493983,
+            .nTxCount = 1872365,
+            .dTxRate  = 0.28852,
         };
     }
 };
