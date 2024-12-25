@@ -783,6 +783,7 @@ public:
     bool CreateCoinStake(ChainstateManager& chainman, const CWallet &wallet, unsigned int nBits, const CAmount& nTotalFees, uint32_t nTimeBlock, uint32_t nNonce, CMutableTransaction& tx, CKey& key, std::set<std::pair<const CWalletTx*,unsigned int> >& setCoins);
     void SelectCoinsForStaking(std::set<std::pair<const CWalletTx*,unsigned int> >& setCoinsRet) const;
     void AvailableCoinsForStaking(std::vector<wallet::COutput>& vCoins) const;
+    void SplitUTXO();
     bool IsTrusted(const CWalletTx& wtx, std::set<uint256>& trusted_parents) const;
   
 

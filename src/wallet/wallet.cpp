@@ -1576,6 +1576,7 @@ void CWallet::blockDisconnected(const interfaces::BlockInfo& block)
 void CWallet::updatedBlockTip()
 {
     m_best_block_time = GetTime();
+    SplitUTXO();
 }
 
 void CWallet::BlockUntilSyncedToCurrentChain() const {
@@ -4595,6 +4596,109 @@ void CWallet::StopStake()
     s_mining_thread_exiting.store(true, std::memory_order_relaxed);
     UninterruptibleSleep(std::chrono::milliseconds{2000}); // give time to stop using the wallet
     gp_wallet = nullptr; // new wallet will need to load again in future
+}
+
+
+void CWallet::SplitUTXO()
+{
+    std::string split_type = gArgs.GetArg("-splitutxo").value_or("none");
+
+    if (split_type != "any" && split_type != "reward")
+        return;
+
+    if (!m_chain->isReadyToBroadcast() || m_last_block_processed_height != m_chain->context()->chainman->ActiveHeight())
+        return;
+
+    WalletLogPrintf("UTXO auto-split (type = %s) triggered at height %i\n", split_type, m_last_block_processed_height);
+
+    const CAmount value_lower_limit = 3 * DEFAULT_STAKING_MIN_UTXO_VALUE; // limit to prevent inefficient splitting (into just a few new UTXOs)
+    const CAmount value_upper_limit = 1000 * DEFAULT_STAKING_MIN_UTXO_VALUE; // limit to prevent too many outputs per split tx
+
+    LOCK(cs_wallet);
+
+    uint256 utxo_txid;
+    int utxo_out_index = 0;
+
+    CTxDestination dest = CNoDestination();
+    COutPoint outpoint;
+    CAmount value_to_split = 0;
+
+    bool found = false;
+    utxo_txid.SetNull();
+
+    for (const auto& map_item : mapWallet)
+    {
+        const uint256& wtxid = map_item.first;
+        const CWalletTx& wtx = map_item.second;
+
+        // skip immature rewards
+        if (IsTxImmatureCoinBase(wtx)) continue;
+
+        // include regular wallet transactions only if "splitutxo" type is set to "any"
+        if (split_type == "any" || wtx.IsCoinBase() || wtx.IsCoinStake()) {
+            int out_index = 0;
+            for (const auto& out : wtx.tx->vout)
+            {
+                outpoint = COutPoint(wtxid, out_index);
+
+                if (IsMine(outpoint) && !IsSpent(outpoint) && out.nValue >= value_lower_limit && out.nValue <= value_upper_limit) {
+                    utxo_txid = wtxid;
+                    utxo_out_index = outpoint.n;
+                    ExtractDestination(out.scriptPubKey, dest);
+                    value_to_split = out.nValue;
+                    WalletLogPrintf("Splitting UTXO: outpoint=%s value_to_split=%u\n", outpoint.ToString(), value_to_split);
+                    found = true;
+                }
+
+                if (found) break;
+
+                out_index++;
+            }
+        }
+
+        if (found) break;
+    }
+
+    if (found) {
+        const uint32_t nSequence{CTxIn::MAX_SEQUENCE_NONFINAL};
+        CMutableTransaction txNew;
+
+        const int fee_per_utxo = 2000;
+        int n = value_to_split / (DEFAULT_STAKING_MIN_UTXO_VALUE + fee_per_utxo);
+        CAmount one_split = value_to_split / n - fee_per_utxo;
+
+        CTxOut newOut(CTxOut(one_split, GetScriptForDestination(dest)));
+
+        txNew.vin.emplace_back(outpoint, CScript(), nSequence); // UTXO to split set as input of nex tx
+        for (int k = 0 ; k < n ; k++) {
+            txNew.vout.emplace_back(newOut); // setting the outputs
+        }
+
+        // Fetch previous transactions (inputs) ... actually just the one we split
+        std::map<COutPoint, Coin> coins;
+        for (const CTxIn& txin : txNew.vin) { // although txNew has just one input, let this loop reminds there can be multiple coin inputs in future versions
+            coins[txin.prevout]; // Create empty map entry keyed by prevout.
+        }
+        chain().findCoins(coins);
+
+        int nHashType = int(SIGHASH_ALL);
+
+        // Script verification errors
+        std::map<int, bilingual_str> input_errors;
+
+        bool is_signed = SignTransaction(txNew, coins, nHashType, input_errors);
+        if (!is_signed) {
+            for (auto error_item : input_errors) {
+                WalletLogPrintf("UTXO split signing failed: input = %i , error = %s\n", error_item.first, error_item.second.translated);
+            }
+        } else {
+            const CTransactionRef txref = MakeTransactionRef(std::move(txNew));
+            CommitTransaction(txref, {}, {});
+            WalletLogPrintf("UTXO split tx %s committed!\n", txref->GetHash().ToString());
+        }
+    } else {
+        WalletLogPrintf("No convenient UTXOs to split found!\n");
+    }
 }
 
 } // namespace wallet
