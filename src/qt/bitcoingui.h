@@ -151,6 +151,11 @@ private:
     QAction* encryptWalletAction = nullptr;
     QAction* backupWalletAction = nullptr;
     QAction* changePassphraseAction = nullptr;
+
+    QAction* splitutxoNoneAction = nullptr;
+    QAction* splitutxoRewardAction = nullptr;
+    QAction* splitutxoAnyAction = nullptr;
+
     QAction* aboutQtAction = nullptr;
     QAction* openRPCConsoleAction = nullptr;
     QAction* openAction = nullptr;
@@ -216,6 +221,12 @@ private:
 
     /** Open the OptionsDialog on the specified tab index */
     void openOptionsDialogWithTab(OptionsDialog::Tab tab);
+
+    void splitutxoNoneRequested();
+    void splitutxoRewardRequested();
+    void splitutxoAnyRequested();
+
+    void splitutxoRefresh();
 
 Q_SIGNALS:
     void quitRequested();

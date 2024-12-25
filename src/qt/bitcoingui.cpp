@@ -385,6 +385,19 @@ void BitcoinGUI::createActions()
     m_mask_values_action->setStatusTip(tr("Mask the values in the Overview tab"));
     m_mask_values_action->setCheckable(true);
 
+    splitutxoNoneAction = new QAction("none", this);
+    splitutxoNoneAction->setCheckable(true);
+
+    splitutxoRewardAction = new QAction("reward", this);
+    splitutxoRewardAction->setCheckable(true);
+
+    splitutxoAnyAction = new QAction("any", this);
+    splitutxoAnyAction->setCheckable(true);
+
+    connect(splitutxoNoneAction, &QAction::triggered, this, &BitcoinGUI::splitutxoNoneRequested);
+    connect(splitutxoRewardAction, &QAction::triggered, this, &BitcoinGUI::splitutxoRewardRequested);
+    connect(splitutxoAnyAction, &QAction::triggered, this, &BitcoinGUI::splitutxoAnyRequested);
+
     connect(quitAction, &QAction::triggered, this, &BitcoinGUI::quitRequested);
     connect(aboutAction, &QAction::triggered, this, &BitcoinGUI::aboutClicked);
     connect(aboutQtAction, &QAction::triggered, qApp, QApplication::aboutQt);
@@ -522,6 +535,14 @@ void BitcoinGUI::createMenuBar()
     }
     settings->addAction(optionsAction);
 
+    QMenu *splitutxo_menu = appMenuBar->addMenu(tr("Split UTXO"));
+    splitutxo_menu->addAction(splitutxoNoneAction);
+    splitutxoNoneAction->setChecked(GUIUtil::getSplitUtxoMode() == "none");
+    splitutxo_menu->addAction(splitutxoRewardAction);
+    splitutxoRewardAction->setChecked(GUIUtil::getSplitUtxoMode() == "reward");
+    splitutxo_menu->addAction(splitutxoAnyAction);
+    splitutxoAnyAction->setChecked(GUIUtil::getSplitUtxoMode() == "any");
+
     QMenu* window_menu = appMenuBar->addMenu(tr("&Window"));
 
     QAction* minimize_action = window_menu->addAction(tr("&Minimize"));
@@ -577,6 +598,32 @@ void BitcoinGUI::createMenuBar()
     help->addSeparator();
     help->addAction(aboutAction);
     help->addAction(aboutQtAction);
+}
+
+void BitcoinGUI::splitutxoNoneRequested()
+{
+    GUIUtil::setSplitUtxoMode("none");
+    splitutxoRefresh();
+}
+
+void BitcoinGUI::splitutxoRewardRequested()
+{
+    GUIUtil::setSplitUtxoMode("reward");
+    splitutxoRefresh();
+}
+
+void BitcoinGUI::splitutxoAnyRequested()
+{
+    GUIUtil::setSplitUtxoMode("any");
+    splitutxoRefresh();
+}
+
+void BitcoinGUI::splitutxoRefresh()
+{
+    std::string split_mode = GUIUtil::getSplitUtxoMode();
+    splitutxoNoneAction->setChecked(split_mode == "none");
+    splitutxoRewardAction->setChecked(split_mode == "reward");
+    splitutxoAnyAction->setChecked(split_mode == "any");
 }
 
 void BitcoinGUI::createToolBars()

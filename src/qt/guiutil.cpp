@@ -294,6 +294,16 @@ QString getDefaultDataDirectory()
     return PathToQString(GetDefaultDataDir());
 }
 
+std::string getSplitUtxoMode()
+{
+    return gArgs.GetArg("-splitutxo").value_or("none");
+}
+
+void setSplitUtxoMode(const std::string& mode)
+{
+    gArgs.ForceSetArg("-splitutxo", mode);
+}
+
 QString ExtractFirstSuffixFromFilter(const QString& filter)
 {
     QRegularExpression filter_re(QStringLiteral(".* \\(\\*\\.(.*)[ \\)]"), QRegularExpression::InvertedGreedinessOption);

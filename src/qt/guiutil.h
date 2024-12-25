@@ -124,6 +124,16 @@ namespace GUIUtil
     QString getDefaultDataDirectory();
 
     /**
+     * Determine current splitutxo mode.
+     */
+    std::string getSplitUtxoMode();
+
+    /**
+     * Set splitutxo mode.
+     */
+    void setSplitUtxoMode(const std::string& mode);
+
+    /**
      * Extract first suffix from filter pattern "Description (*.foo)" or "Description (*.foo *.bar ...).
      *
      * @param[in] filter Filter specification such as "Comma Separated Files (*.csv)"
