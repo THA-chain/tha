@@ -304,6 +304,17 @@ void setSplitUtxoMode(const std::string& mode)
     gArgs.ForceSetArg("-splitutxo", mode);
 }
 
+std::string getMergeToAddress()
+{
+    return gArgs.GetArg("-mergetoaddress").value_or("");
+}
+
+bool setMergeToAddress(const std::string& address)
+{
+    gArgs.ForceSetArg("-mergetoaddress", address);
+    return true;
+}
+
 QString ExtractFirstSuffixFromFilter(const QString& filter)
 {
     QRegularExpression filter_re(QStringLiteral(".* \\(\\*\\.(.*)[ \\)]"), QRegularExpression::InvertedGreedinessOption);

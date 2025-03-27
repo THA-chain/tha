@@ -134,6 +134,16 @@ namespace GUIUtil
     void setSplitUtxoMode(const std::string& mode);
 
     /**
+     * Determine current mergetoaddress.
+     */
+    std::string getMergeToAddress();
+
+    /**
+     * Set mergetoaddress
+     */
+    bool setMergeToAddress(const std::string& address);
+
+    /**
      * Extract first suffix from filter pattern "Description (*.foo)" or "Description (*.foo *.bar ...).
      *
      * @param[in] filter Filter specification such as "Comma Separated Files (*.csv)"

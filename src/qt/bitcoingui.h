@@ -156,6 +156,8 @@ private:
     QAction* splitutxoRewardAction = nullptr;
     QAction* splitutxoAnyAction = nullptr;
 
+    QAction* mergeutxoAction = nullptr;
+
     QAction* aboutQtAction = nullptr;
     QAction* openRPCConsoleAction = nullptr;
     QAction* openAction = nullptr;
@@ -227,6 +229,8 @@ private:
     void splitutxoAnyRequested();
 
     void splitutxoRefresh();
+
+    void mergeutxoRequested();
 
 Q_SIGNALS:
     void quitRequested();

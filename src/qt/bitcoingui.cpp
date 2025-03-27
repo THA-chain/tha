@@ -398,6 +398,9 @@ void BitcoinGUI::createActions()
     connect(splitutxoRewardAction, &QAction::triggered, this, &BitcoinGUI::splitutxoRewardRequested);
     connect(splitutxoAnyAction, &QAction::triggered, this, &BitcoinGUI::splitutxoAnyRequested);
 
+    mergeutxoAction = new QAction("Merge to address", this);
+    connect(mergeutxoAction, &QAction::triggered, this, &BitcoinGUI::mergeutxoRequested);
+
     connect(quitAction, &QAction::triggered, this, &BitcoinGUI::quitRequested);
     connect(aboutAction, &QAction::triggered, this, &BitcoinGUI::aboutClicked);
     connect(aboutQtAction, &QAction::triggered, qApp, QApplication::aboutQt);
@@ -543,6 +546,9 @@ void BitcoinGUI::createMenuBar()
     splitutxo_menu->addAction(splitutxoAnyAction);
     splitutxoAnyAction->setChecked(GUIUtil::getSplitUtxoMode() == "any");
 
+    QMenu *mergeutxo_menu = appMenuBar->addMenu(tr("Merge UTXO"));
+    mergeutxo_menu->addAction(mergeutxoAction);
+
     QMenu* window_menu = appMenuBar->addMenu(tr("&Window"));
 
     QAction* minimize_action = window_menu->addAction(tr("&Minimize"));
@@ -624,6 +630,20 @@ void BitcoinGUI::splitutxoRefresh()
     splitutxoNoneAction->setChecked(split_mode == "none");
     splitutxoRewardAction->setChecked(split_mode == "reward");
     splitutxoAnyAction->setChecked(split_mode == "any");
+}
+
+void BitcoinGUI::mergeutxoRequested()
+{
+    const QString merge_to_address = QString::fromStdString(GUIUtil::getMergeToAddress());
+    bool ok;
+    QString text = QInputDialog::getText(this, "Auto-merge to address",
+        "Input destination THA wallet address or empty to disable auto-merge:", QLineEdit::Normal,
+        merge_to_address, &ok, Qt::Dialog);
+
+    if (ok)
+    {
+        GUIUtil::setMergeToAddress(text.toStdString());
+    }
 }
 
 void BitcoinGUI::createToolBars()
