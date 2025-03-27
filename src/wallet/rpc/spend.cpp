@@ -314,6 +314,44 @@ RPCHelpMan sendtoaddress()
     };
 }
 
+RPCHelpMan mergetoaddress()
+{
+    return RPCHelpMan{"mergetoaddress",
+                "\nMerge UTXOs to a given address." +
+        HELP_REQUIRING_PASSPHRASE,
+                {
+                    {"address", RPCArg::Type::STR, RPCArg::Optional::NO, "The THA address to merge to."},
+                    {"skip", RPCArg::Type::BOOL, RPCArg::Default{true}, "Whether to skip 0.1 THA UTXOS when merging."},
+                },
+                {
+                    RPCResult{"pop",
+                        RPCResult::Type::STR_HEX, "txid", "The transaction id."
+                    },
+                },
+                RPCExamples{
+                    "\nMerge to \"" + EXAMPLE_ADDRESS[0] + "\"\n"
+                    + HelpExampleCli("mergetoaddress", "\"" + EXAMPLE_ADDRESS[0] + "\"")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    std::shared_ptr<CWallet> const pwallet = GetWalletForJSONRPCRequest(request);
+    if (!pwallet) return UniValue::VNULL;
+
+    // Make sure the results are valid at least up to the most recent block
+    // the user could have gotten from another RPC command prior to now
+    pwallet->BlockUntilSyncedToCurrentChain();
+
+    LOCK(pwallet->cs_wallet);
+
+    std::string sAddress = request.params[0].get_str();
+    bool fSkip = request.params[1].isNull() ? true : request.params[1].get_bool();
+    UniValue merge_result(UniValue::VOBJ);
+    pwallet->MergeUTXO(sAddress, fSkip, merge_result);
+    return merge_result;
+},
+    };
+}
+
 RPCHelpMan sendmany()
 {
     return RPCHelpMan{"sendmany",

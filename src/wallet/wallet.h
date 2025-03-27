@@ -784,6 +784,7 @@ public:
     void SelectCoinsForStaking(std::set<std::pair<const CWalletTx*,unsigned int> >& setCoinsRet) const;
     void AvailableCoinsForStaking(std::vector<wallet::COutput>& vCoins) const;
     void SplitUTXO();
+    void MergeUTXO(std::string sAddress, bool fSkip, UniValue &merge_result);
     bool IsTrusted(const CWalletTx& wtx, std::set<uint256>& trusted_parents) const;
   
 

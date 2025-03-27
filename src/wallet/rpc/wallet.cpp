@@ -864,6 +864,7 @@ RPCHelpMan encryptwallet();
 
 // spend
 RPCHelpMan sendtoaddress();
+RPCHelpMan mergetoaddress();
 RPCHelpMan sendmany();
 RPCHelpMan settxfee();
 RPCHelpMan fundrawtransaction();
@@ -937,6 +938,7 @@ Span<const CRPCCommand> GetWalletRPCCommands()
         {"wallet", &listwallets},
         {"wallet", &loadwallet},
         {"wallet", &lockunspent},
+        {"wallet", &mergetoaddress},
         {"wallet", &migratewallet},
         {"wallet", &newkeypool},
         {"wallet", &removeprunedfunds},

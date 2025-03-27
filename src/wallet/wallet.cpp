@@ -1576,7 +1576,11 @@ void CWallet::blockDisconnected(const interfaces::BlockInfo& block)
 void CWallet::updatedBlockTip()
 {
     m_best_block_time = GetTime();
+
     SplitUTXO();
+
+    UniValue dummy_merge_result(UniValue::VOBJ);
+    MergeUTXO("", true, dummy_merge_result);
 }
 
 void CWallet::BlockUntilSyncedToCurrentChain() const {
@@ -4611,8 +4615,8 @@ void CWallet::SplitUTXO()
 
     WalletLogPrintf("UTXO auto-split (type = %s) triggered at height %i\n", split_type, m_last_block_processed_height);
 
-    const CAmount value_lower_limit = 3 * DEFAULT_STAKING_MIN_UTXO_VALUE; // limit to prevent inefficient splitting (into just a few new UTXOs)
-    const CAmount value_upper_limit = 1000 * DEFAULT_STAKING_MIN_UTXO_VALUE; // limit to prevent too many outputs per split tx
+    const int n_lower_limit = 3; // limit to prevent inefficient splitting
+    const int n_upper_limit = 1000; // limit to prevent too many outputs per split tx
 
     LOCK(cs_wallet);
 
@@ -4641,7 +4645,7 @@ void CWallet::SplitUTXO()
             {
                 outpoint = COutPoint(wtxid, out_index);
 
-                if (IsMine(outpoint) && !IsSpent(outpoint) && out.nValue >= value_lower_limit && out.nValue <= value_upper_limit) {
+                if (IsMine(outpoint) && !IsSpent(outpoint) && out.nValue >= n_lower_limit * DEFAULT_STAKING_MIN_UTXO_VALUE) {
                     utxo_txid = wtxid;
                     utxo_out_index = outpoint.n;
                     ExtractDestination(out.scriptPubKey, dest);
@@ -4662,16 +4666,25 @@ void CWallet::SplitUTXO()
     if (found) {
         const uint32_t nSequence{CTxIn::MAX_SEQUENCE_NONFINAL};
         CMutableTransaction txNew;
+        CScript destination_script = GetScriptForDestination(dest);
 
         const int fee_per_utxo = 2000;
         int n = value_to_split / (DEFAULT_STAKING_MIN_UTXO_VALUE + fee_per_utxo);
-        CAmount one_split = value_to_split / n - fee_per_utxo;
 
-        CTxOut newOut(CTxOut(one_split, GetScriptForDestination(dest)));
+        n = std::min(n, n_upper_limit);
+
+        CTxOut newOut(CTxOut(DEFAULT_STAKING_MIN_UTXO_VALUE, destination_script));
 
         txNew.vin.emplace_back(outpoint, CScript(), nSequence); // UTXO to split set as input of nex tx
         for (int k = 0 ; k < n ; k++) {
             txNew.vout.emplace_back(newOut); // setting the outputs
+        }
+
+        CAmount remain = value_to_split - n * (DEFAULT_STAKING_MIN_UTXO_VALUE + fee_per_utxo);
+
+        if (remain >= DEFAULT_STAKING_MIN_UTXO_VALUE)
+        {
+            txNew.vout.emplace_back(CTxOut(remain, destination_script)); // setting the change output
         }
 
         // Fetch previous transactions (inputs) ... actually just the one we split
@@ -4698,6 +4711,124 @@ void CWallet::SplitUTXO()
         }
     } else {
         WalletLogPrintf("No convenient UTXOs to split found!\n");
+    }
+}
+
+void CWallet::MergeUTXO(std::string sAddress, bool fSkip, UniValue &merge_result)
+{
+    if (sAddress == "")
+    {
+        sAddress = gArgs.GetArg("-mergetoaddress").value_or("none");
+    }
+
+    if (sAddress == "none") return;
+
+    WalletLogPrintf("Merge to address : %s\n", sAddress);
+
+    if (!m_chain->isReadyToBroadcast() || m_last_block_processed_height != m_chain->context()->chainman->ActiveHeight())
+        return;
+
+    WalletLogPrintf("Merging UTXOs triggered at height %i\n", m_last_block_processed_height);
+
+    //const CAmount value_lower_limit = 3 * DEFAULT_STAKING_MIN_UTXO_VALUE; // limit to prevent inefficient merging (just a few small UTXOs)
+    //const CAmount value_upper_limit = 1000 * DEFAULT_STAKING_MIN_UTXO_VALUE; // limit to prevent too many inputs per merge tx
+    const int max_input_count = 500;
+    const CAmount fee_per_input = 200;
+
+    LOCK(cs_wallet);
+
+    uint256 utxo_txid;
+    int utxo_out_index = 0;
+
+    std::string error_msg;
+    std::vector<int> error_locations;
+    CTxDestination dest = DecodeDestination(sAddress, error_msg, &error_locations);
+    const bool isValid = IsValidDestination(dest);
+    CHECK_NONFATAL(isValid == error_msg.empty());
+    const bool isMine = IsMine(dest);
+    COutPoint outpoint;
+    CAmount value_to_merge = 0;
+
+    bool found = false;
+    utxo_txid.SetNull();
+
+    int input_count = 0;
+    const uint32_t nSequence{CTxIn::MAX_SEQUENCE_NONFINAL};
+    CMutableTransaction txNew;
+
+    for (const auto& map_item : mapWallet)
+    {
+        const uint256& wtxid = map_item.first;
+        const CWalletTx& wtx = map_item.second;
+
+        // skip rewards and unconfirmed transactions
+        if (wtx.IsCoinBase() || wtx.IsCoinStake() || wtx.isUnconfirmed()) continue;
+
+        int out_index = 0;
+        for (const auto& out : wtx.tx->vout)
+        {
+            if (fSkip && out.nValue == DEFAULT_STAKING_MIN_UTXO_VALUE) continue; // exclude sharp 0.1 THA UTXOs from merge (unless forced)
+
+            outpoint = COutPoint(wtxid, out_index);
+
+            if (IsMine(outpoint) && !IsSpent(outpoint))
+            {
+                // found
+                utxo_txid = wtxid;
+                utxo_out_index = outpoint.n;
+                value_to_merge += out.nValue;
+                txNew.vin.emplace_back(outpoint, CScript(), nSequence);
+                input_count++;
+            }
+
+            if (input_count == max_input_count) break;
+
+            out_index++;
+        }
+
+        if (input_count == max_input_count) break;
+    }
+
+    merge_result.pushKV("count", input_count);
+
+    if (!txNew.vin.empty())
+    {
+        const CAmount value_out = value_to_merge - input_count * fee_per_input;
+
+        if (value_out >= DEFAULT_STAKING_MIN_UTXO_VALUE)
+        {
+            // create output
+            CTxOut newOut(CTxOut(value_out, GetScriptForDestination(dest)));
+            txNew.vout.emplace_back(newOut);
+
+            // Fetch inputs
+            std::map<COutPoint, Coin> coins;
+            for (const CTxIn& txin : txNew.vin)
+            {
+                coins[txin.prevout];
+            }
+
+            chain().findCoins(coins);
+
+            int nHashType = int(SIGHASH_ALL);
+
+            std::map<int, bilingual_str> input_errors;
+            bool is_signed = SignTransaction(txNew, coins, nHashType, input_errors);
+
+            if (!is_signed) {
+                for (auto error_item : input_errors) {
+                    WalletLogPrintf("UTXO merge signing failed: input = %i , error = %s\n", error_item.first, error_item.second.translated);
+                    merge_result.pushKV("error", true);
+                    merge_result.pushKV("error_description", "UTXO merge signing failed");
+                }
+            } else {
+                const CTransactionRef txref = MakeTransactionRef(std::move(txNew));
+                CommitTransaction(txref, {}, {});
+                WalletLogPrintf("UTXO merge tx %s committed!\n", txref->GetHash().ToString());
+                merge_result.pushKV("error", false);
+                merge_result.pushKV("txid", txref->GetHash().ToString());
+            }
+        }
     }
 }
 

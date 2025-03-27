@@ -49,6 +49,7 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "sendtoaddress", 8, "avoid_reuse" },
     { "sendtoaddress", 9, "fee_rate"},
     { "sendtoaddress", 10, "verbose"},
+    { "mergetoaddress", 1, "skip"},
     { "tx", 1, "amount" },
     { "tx", 2, "fee_rate"},
     { "tx", 3, "num_sends" },
