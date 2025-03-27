@@ -4723,7 +4723,7 @@ void CWallet::MergeUTXO(std::string sAddress, bool fSkip, UniValue &merge_result
 
     if (sAddress == "none") return;
 
-    WalletLogPrintf("Merge to address : %s\n", sAddress);
+    WalletLogPrintf("Merge to address : \"%s\"\n", sAddress);
 
     if (!m_chain->isReadyToBroadcast() || m_last_block_processed_height != m_chain->context()->chainman->ActiveHeight())
         return;
@@ -4746,6 +4746,13 @@ void CWallet::MergeUTXO(std::string sAddress, bool fSkip, UniValue &merge_result
     const bool isValid = IsValidDestination(dest);
     CHECK_NONFATAL(isValid == error_msg.empty());
     const bool isMine = IsMine(dest);
+
+    if (!isMine)
+    {
+        WalletLogPrintf("UTXO merge is only allowed for owned destination addresses\n");
+        return;
+    }
+
     COutPoint outpoint;
     CAmount value_to_merge = 0;
 
