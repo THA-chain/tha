@@ -179,6 +179,7 @@ public:
                 { 37, uint256S("0xef6318c2651e085ff8a88bb076110de079f5a4b52a16de9bb90e5ff639de46f3")}, // 1st PoT block
                 { 500, uint256S("0xfcdf0599d80caead50b695002dbb97f793abdb71597dc81e44b43f9182a1c9ae")},
                 { 11000, uint256S("0xfd17ecbfb9c9dfa01508c14d67397ab6c6ad6496d1b6de2a73174560504f1b5e")},
+                { 38300, uint256S("0xead5685fcfc7a7d208e187efe437208d86234232b4e2ab8ef1c3775b6cc7cff0")},
             }
         };
 
@@ -187,9 +188,9 @@ public:
         };
 
         chainTxData = ChainTxData{
-            .nTime    = 1726493983,
-            .nTxCount = 1872365,
-            .dTxRate  = 0.28852,
+            .nTime    = 1742970227,
+            .nTxCount = 4457663,
+            .dTxRate  = 0.2,
         };
     }
 };
