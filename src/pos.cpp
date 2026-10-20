@@ -18,6 +18,7 @@
 #include <script/solver.h>
 #include <consensus/consensus.h>
 #include <logging.h>
+#include <crypto/common.h>
 
 using namespace std;
 
@@ -293,4 +294,19 @@ void CacheKernel(std::map<COutPoint, CStakeCache>& cache, const COutPoint& prevo
 
     CStakeCache c(blockFrom->nTime, coinPrev.out.nValue);
     cache.insert({prevout, c});
+}
+
+uint256 ComputeStakeKernelHash(const uint256& nStakeModifier, uint32_t blockFromTime, const COutPoint& prevout, uint32_t nTimeBlock)
+{
+    // Byte layout matches the CDataStream in CheckStakeKernelHash:
+    // modifier(32) | blockFromTime(4) | prevout.hash(32) | prevout.n(4) | nTimeBlock(4)
+    unsigned char buf[76];
+    memcpy(buf, nStakeModifier.begin(), 32);
+    WriteLE32(buf + 32, blockFromTime);
+    memcpy(buf + 36, prevout.hash.begin(), 32);
+    WriteLE32(buf + 68, prevout.n);
+    WriteLE32(buf + 72, nTimeBlock);
+    uint256 result;
+    CHash256().Write(buf).Finalize(result);
+    return result;
 }

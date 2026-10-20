@@ -64,4 +64,8 @@ bool CheckRecoveredPubKeyFromBlockSignature(CBlockIndex* pindexPrev, const CBloc
 bool CheckKernel(CBlockIndex* pindexPrev, unsigned int nBits, uint32_t nTimeBlock, uint32_t nNonce, const COutPoint& prevout, CCoinsViewCache& view);
 bool CheckKernel(CBlockIndex* pindexPrev, unsigned int nBits, uint32_t nTimeBlock, uint32_t nNonce, const COutPoint& prevout, CCoinsViewCache& view, const std::map<COutPoint, CStakeCache>& cache);
 
+// Same kernel hash as CheckStakeKernelHash, without a CDataStream allocation per
+// call. Used by the staker's parallel kernel search.
+uint256 ComputeStakeKernelHash(const uint256& nStakeModifier, uint32_t blockFromTime, const COutPoint& prevout, uint32_t nTimeBlock);
+
 #endif // BITCOIN_POS_H

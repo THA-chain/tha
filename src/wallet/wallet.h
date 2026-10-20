@@ -82,6 +82,8 @@ using LoadWalletFn = std::function<void(std::unique_ptr<interfaces::Wallet> wall
 struct bilingual_str;
 
 static const bool DEFAULT_STAKE_CACHE = true;
+//! Default for -stakingthreads (0 = half the CPU cores)
+static const int64_t DEFAULT_STAKING_THREADS = 0;
 
 extern std::atomic<bool> s_mining_thread_exiting;
 extern std::atomic<bool> s_mining_allowed;
@@ -351,6 +353,17 @@ private:
     std::atomic<int64_t> m_birth_time{std::numeric_limits<int64_t>::max()};
 
     std::map<COutPoint, CStakeCache> stakeCache;
+    // Flat snapshot of the staking coins, rebuilt when the tip or coin set changes,
+    // so the per-second kernel search can be split across threads.
+    struct StakeCandidate {
+        COutPoint prevout;
+        uint32_t blockFromTime;
+        const CWalletTx* wtx;
+        unsigned int n;
+    };
+    std::vector<StakeCandidate> m_stake_candidates;
+    uint256 m_stake_candidates_tip;
+    size_t m_stake_candidates_set_size{0};
     /**
      * Used to keep track of spent outpoints, and
      * detect and report conflicts (double-spends or

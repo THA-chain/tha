@@ -762,7 +762,7 @@ void ThreadStakeMiner(wallet::CWallet& wallet, CConnman& connman, ChainstateMana
                 }
                 else
                 {
-                    s_hashes_per_second = 100 * setCoins.size() / delta;
+                    s_hashes_per_second = 1000.0 * setCoins.size() / delta;
                     s_cpu_loading = 100.0;
                 }
 
