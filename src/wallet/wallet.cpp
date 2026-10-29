@@ -4535,8 +4535,17 @@ bool CWallet::CreateCoinStake(ChainstateManager& chainman, const CWallet& wallet
         for (std::thread& w : workers) w.join();
 
         // The hit is re-verified by CheckKernel below, with and without the cache.
-        if (nFound < nCandidates)
-            vKernelCoins.emplace_back(m_stake_candidates[nFound].wtx, m_stake_candidates[nFound].n);
+        if (nFound < nCandidates) {
+            const StakeCandidate& hit = m_stake_candidates[nFound];
+            if (setCoins.count({hit.wtx, hit.n})) {
+                vKernelCoins.emplace_back(hit.wtx, hit.n);
+            } else {
+                // The snapshot no longer matches the wallet (a coin changed without a
+                // new tip). Rebuild it next pass and search this one serially.
+                m_stake_candidates_tip.SetNull();
+                vKernelCoins.assign(setCoins.begin(), setCoins.end());
+            }
+        }
     }
     else
     {
