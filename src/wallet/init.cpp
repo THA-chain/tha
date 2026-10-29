@@ -71,6 +71,7 @@ void WalletInit::AddWalletOptions(ArgsManager& argsman) const
     argsman.AddArg("-signer=<cmd>", "External signing tool, see doc/external-signer.md", ArgsManager::ALLOW_ANY, OptionsCategory::WALLET);
 #endif
     argsman.AddArg("-spendzeroconfchange", strprintf("Spend unconfirmed change when sending transactions (default: %u)", DEFAULT_SPEND_ZEROCONF_CHANGE), ArgsManager::ALLOW_ANY, OptionsCategory::WALLET);
+    argsman.AddArg("-stakingthreads=<n>", strprintf("Number of threads used to search for a staking kernel (0 = half the CPU cores, default: %d)", DEFAULT_STAKING_THREADS), ArgsManager::ALLOW_ANY, OptionsCategory::WALLET);
     argsman.AddArg("-splitutxo=<split_type>", "Set automatic utxo split mode (options: none, any, reward).", ArgsManager::ALLOW_ANY, OptionsCategory::WALLET);
     argsman.AddArg("-mergetoaddress=<address>", "Set automatic utxo merge destination address.", ArgsManager::ALLOW_ANY, OptionsCategory::WALLET);
     argsman.AddArg("-txconfirmtarget=<n>", strprintf("If paytxfee is not set, include enough fee so transactions begin confirmation on average within n blocks (default: %u)", DEFAULT_TX_CONFIRM_TARGET), ArgsManager::ALLOW_ANY, OptionsCategory::WALLET);

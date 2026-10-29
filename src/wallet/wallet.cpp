@@ -4455,25 +4455,101 @@ bool CWallet::CreateCoinStake(ChainstateManager& chainman, const CWallet& wallet
     scriptEmpty.clear();
     txNew.vout.push_back(CTxOut(0, scriptEmpty));
 
-    // Choose coins to use
-    CAmount nBalance = GetBalance(wallet).m_mine_stakeable;
-
     std::vector<const CWalletTx*> vwtxPrev;
 
     if (setCoins.empty())
         return false;
 
-    if(stakeCache.size() > setCoins.size() + 100){
-        //Determining if the cache is still valid is harder than just clearing it when it gets too big, so instead just clear it
-        //when it has more than 100 entries more than the actual setCoins.
-        stakeCache.clear();
+    // Rebuild the cache and the flat candidate list only when the tip or the coin
+    // set changes, instead of walking every coin's cache entry every second.
+    if (m_stake_candidates_tip != pindexPrev->GetBlockHash() || m_stake_candidates_set_size != setCoins.size())
+    {
+        if(stakeCache.size() > setCoins.size() + 100){
+            //Determining if the cache is still valid is harder than just clearing it when it gets too big, so instead just clear it
+            //when it has more than 100 entries more than the actual setCoins.
+            stakeCache.clear();
+        }
+
+        m_stake_candidates.clear();
+        m_stake_candidates.reserve(setCoins.size());
+        for(const std::pair<const CWalletTx*,unsigned int> &pcoin : setCoins)
+        {
+            COutPoint prevoutStake = COutPoint(pcoin.first->GetHash(), pcoin.second);
+            CacheKernel(stakeCache, prevoutStake, pindexPrev, chainman.ActiveChainstate().CoinsTip()); //this will do a 2 disk loads per op
+            // Coins that cannot be cached (immature, missing) would fail CheckKernel anyway.
+            auto it = stakeCache.find(prevoutStake);
+            if (it != stakeCache.end())
+                m_stake_candidates.push_back({prevoutStake, it->second.blockFromTime, pcoin.first, pcoin.second});
+        }
+        m_stake_candidates_tip = pindexPrev->GetBlockHash();
+        m_stake_candidates_set_size = setCoins.size();
     }
 
-    for(const std::pair<const CWalletTx*,unsigned int> &pcoin : setCoins)
+    // Search the candidates for a kernel on several threads. The lowest index that
+    // meets the target wins, which is the same coin the serial loop would pick.
+    const size_t nCandidates = m_stake_candidates.size();
+    const uint256 nStakeModifier = pindexPrev->nStakeModifier;
+    arith_uint256 bnTarget;
+    bnTarget.SetCompact(nBits);
+    bnTarget = POW_POT_DIFF_HELPER*bnTarget;
+
+    // Guard against the fast hash ever diverging from CheckStakeKernelHash: if it
+    // does, fall back to the original serial search over every coin.
+    bool fFastSearch = true;
+    for (const StakeCandidate& c : m_stake_candidates) {
+        if (nTimeBlock < c.blockFromTime) continue;
+        uint256 hashSlow, targetSlow;
+        CheckStakeKernelHash(pindexPrev, nBits, c.blockFromTime, 0, c.prevout, nTimeBlock, nNonce, hashSlow, targetSlow);
+        if (hashSlow != ComputeStakeKernelHash(nStakeModifier, c.blockFromTime, c.prevout, nTimeBlock)) {
+            LogPrintf("CreateCoinStake : fast kernel hash mismatch, using serial search\n");
+            fFastSearch = false;
+        }
+        break;
+    }
+
+    std::vector<std::pair<const CWalletTx*,unsigned int>> vKernelCoins;
+    if (fFastSearch && nNonce == 0xD0D0FACE)
     {
-        //boost::this_thread::interruption_point();
-        COutPoint prevoutStake = COutPoint(pcoin.first->GetHash(), pcoin.second);
-        CacheKernel(stakeCache, prevoutStake, pindexPrev, chainman.ActiveChainstate().CoinsTip()); //this will do a 2 disk loads per op
+        std::atomic<size_t> nFound{nCandidates};
+        auto search = [&](size_t begin, size_t end) {
+            for (size_t i = begin; i < end && i < nFound.load(std::memory_order_relaxed); ++i) {
+                const StakeCandidate& c = m_stake_candidates[i];
+                if (nTimeBlock < c.blockFromTime) continue;
+                if (UintToArith256(ComputeStakeKernelHash(nStakeModifier, c.blockFromTime, c.prevout, nTimeBlock)) <= bnTarget) {
+                    size_t prev = nFound.load();
+                    while (i < prev && !nFound.compare_exchange_weak(prev, i)) {}
+                    return;
+                }
+            }
+        };
+
+        int64_t nThreads = gArgs.GetIntArg("-stakingthreads", DEFAULT_STAKING_THREADS);
+        if (nThreads <= 0) nThreads = std::max(1u, std::thread::hardware_concurrency() / 2);
+        nThreads = std::min<int64_t>(nThreads, std::max<size_t>(1, nCandidates / 1000));
+
+        const size_t chunk = (nCandidates + nThreads - 1) / nThreads;
+        std::vector<std::thread> workers;
+        for (int64_t t = 1; t < nThreads; ++t)
+            workers.emplace_back(search, std::min(nCandidates, t * chunk), std::min(nCandidates, (t + 1) * chunk));
+        search(0, std::min(nCandidates, chunk));
+        for (std::thread& w : workers) w.join();
+
+        // The hit is re-verified by CheckKernel below, with and without the cache.
+        if (nFound < nCandidates) {
+            const StakeCandidate& hit = m_stake_candidates[nFound];
+            if (setCoins.count({hit.wtx, hit.n})) {
+                vKernelCoins.emplace_back(hit.wtx, hit.n);
+            } else {
+                // The snapshot no longer matches the wallet (a coin changed without a
+                // new tip). Rebuild it next pass and search this one serially.
+                m_stake_candidates_tip.SetNull();
+                vKernelCoins.assign(setCoins.begin(), setCoins.end());
+            }
+        }
+    }
+    else
+    {
+        vKernelCoins.assign(setCoins.begin(), setCoins.end());
     }
 
     int64_t nCredit = 0;
@@ -4487,7 +4563,7 @@ bool CWallet::CreateCoinStake(ChainstateManager& chainman, const CWallet& wallet
         return false;
     }
 
-    for(const std::pair<const CWalletTx*,unsigned int> &pcoin : setCoins)
+    for(const std::pair<const CWalletTx*,unsigned int> &pcoin : vKernelCoins)
     {
         bool fKernelFound = false;
         //boost::this_thread::interruption_point();
@@ -4562,7 +4638,13 @@ bool CWallet::CreateCoinStake(ChainstateManager& chainman, const CWallet& wallet
             break; // if kernel is found stop searching
     }
 
-    if (nCredit == 0 || nCredit > nBalance)
+    if (nCredit == 0)
+        return false;
+
+    // Only needed once a kernel is found; computing it every second is expensive
+    // for wallets holding hundreds of thousands of coins.
+    CAmount nBalance = GetBalance(wallet).m_mine_stakeable;
+    if (nCredit > nBalance)
         return false;
 
 
